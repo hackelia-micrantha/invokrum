@@ -133,6 +133,21 @@ fn unambiguous_unsupported_schema_precedes_strict_v1_field_decoding() {
 }
 
 #[test]
+fn json_key_named_like_yaml_merge_is_not_treated_as_yaml_syntax() {
+    let unsupported = r#"{
+        "schema":"invokrum.dev/v2",
+        "id":"example",
+        "classes":[],
+        "<<":{}
+    }"#;
+
+    assert_eq!(
+        parse_json(unsupported),
+        Err(SchemaError::UnsupportedSchema("invokrum.dev/v2".to_owned()))
+    );
+}
+
+#[test]
 fn yaml_subset_rejects_parser_expansion_and_complex_features() {
     let cases = [
         (
