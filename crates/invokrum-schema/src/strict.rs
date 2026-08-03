@@ -64,8 +64,7 @@ pub(crate) fn preflight_yaml(input: &str) -> Result<(), PreflightError> {
         message: "empty YAML document".to_owned(),
     })?;
 
-    StrictValue::deserialize(first)
-        .map_err(|error| classify_decode("yaml", &error.to_string()))?;
+    StrictValue::deserialize(first).map_err(|error| classify_decode("yaml", &error.to_string()))?;
 
     if documents.next().is_some() {
         return Err(PreflightError::MultipleYamlDocuments);
@@ -212,6 +211,41 @@ fn yaml_control_surface(line: &str) -> String {
     surface
 }
 
+struct StrictKey(String);
+
+impl<'de> Deserialize<'de> for StrictKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(StrictKeyVisitor)
+    }
+}
+
+struct StrictKeyVisitor;
+
+impl Visitor<'_> for StrictKeyVisitor {
+    type Value = StrictKey;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a string mapping key")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(StrictKey(value.to_owned()))
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(StrictKey(value))
+    }
+}
+
 struct StrictValue;
 
 impl<'de> Deserialize<'de> for StrictValue {
@@ -308,7 +342,7 @@ impl<'de> Visitor<'de> for StrictValueVisitor {
         A: MapAccess<'de>,
     {
         let mut keys = BTreeSet::new();
-        while let Some(key) = mapping.next_key::<String>()? {
+        while let Some(StrictKey(key)) = mapping.next_key::<StrictKey>()? {
             if key == "<<" {
                 return Err(de::Error::custom(MERGE_MAPPING_KEY_MARKER));
             }
