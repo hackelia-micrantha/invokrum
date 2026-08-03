@@ -26,6 +26,7 @@ use std::os::unix::fs::MetadataExt;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LocalPackSourceError {
     UnsupportedPlatform,
+    ProcUnavailable,
     RootUnavailable,
     RootSymbolicLink,
     RootNotDirectory,
@@ -35,6 +36,7 @@ impl fmt::Display for LocalPackSourceError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::UnsupportedPlatform => "local pack sources are supported on Linux only",
+            Self::ProcUnavailable => "Linux procfs file-descriptor inspection is unavailable",
             Self::RootUnavailable => "pack root is unavailable",
             Self::RootSymbolicLink => "pack root must not be a symbolic link",
             Self::RootNotDirectory => "pack root must be a directory",
@@ -50,6 +52,8 @@ pub struct LocalPackSource {
     root: PathBuf,
     #[cfg(target_os = "linux")]
     root_device: u64,
+    #[cfg(target_os = "linux")]
+    root_inode: u64,
 }
 
 impl LocalPackSource {
@@ -86,9 +90,16 @@ fn open_root(root: &Path) -> Result<LocalPackSource, LocalPackSourceError> {
         return Err(LocalPackSourceError::RootNotDirectory);
     }
 
+    let proc_descriptors = fs::metadata("/proc/self/fd")
+        .map_err(|_| LocalPackSourceError::ProcUnavailable)?;
+    if !proc_descriptors.is_dir() {
+        return Err(LocalPackSourceError::ProcUnavailable);
+    }
+
     Ok(LocalPackSource {
         root: canonical,
         root_device: metadata.dev(),
+        root_inode: metadata.ino(),
     })
 }
 
@@ -113,6 +124,7 @@ fn load_source(
     source: &PackRelativePath,
     maximum_bytes: usize,
 ) -> Result<Vec<u8>, SourceFailure> {
+    verify_root(adapter, source)?;
     let candidate = adapter.root.join(source.as_str());
     verify_components(adapter, source, &candidate)?;
 
@@ -150,13 +162,16 @@ fn load_source(
         return Err(reject(source, SourceFailureKind::ChangedDuringRead));
     }
 
-    let current = fs::symlink_metadata(&candidate).map_err(|error| map_io(source, &error))?;
+    let current = fs::symlink_metadata(&candidate)
+        .map_err(|error| map_post_read_io(source, &error))?;
     if current.file_type().is_symlink() {
         return Err(reject(source, SourceFailureKind::SymbolicLink));
     }
+    verify_file_metadata(adapter, source, &current)?;
     if !same_identity(&opened, &current) {
         return Err(reject(source, SourceFailureKind::ChangedDuringRead));
     }
+    verify_root(adapter, source)?;
 
     Ok(bytes)
 }
@@ -168,6 +183,25 @@ fn load_source(
     _maximum_bytes: usize,
 ) -> Result<Vec<u8>, SourceFailure> {
     Err(reject(source, SourceFailureKind::UnsupportedPlatform))
+}
+
+#[cfg(target_os = "linux")]
+fn verify_root(
+    adapter: &LocalPackSource,
+    source: &PackRelativePath,
+) -> Result<(), SourceFailure> {
+    let metadata = fs::symlink_metadata(&adapter.root)
+        .map_err(|error| map_post_read_io(source, &error))?;
+    if metadata.file_type().is_symlink() {
+        return Err(reject(source, SourceFailureKind::SymbolicLink));
+    }
+    if !metadata.is_dir()
+        || metadata.dev() != adapter.root_device
+        || metadata.ino() != adapter.root_inode
+    {
+        return Err(reject(source, SourceFailureKind::ChangedDuringRead));
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -244,4 +278,12 @@ fn map_io(source: &PackRelativePath, error: &std::io::Error) -> SourceFailure {
         _ => SourceFailureKind::Io,
     };
     reject(source, kind)
+}
+
+fn map_post_read_io(source: &PackRelativePath, error: &std::io::Error) -> SourceFailure {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        reject(source, SourceFailureKind::ChangedDuringRead)
+    } else {
+        map_io(source, error)
+    }
 }
