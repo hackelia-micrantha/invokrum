@@ -53,10 +53,7 @@ pub(crate) enum PreflightError {
     },
 }
 
-pub(crate) fn preflight_json(
-    input: &str,
-    maximum_depth: usize,
-) -> Result<(), PreflightError> {
+pub(crate) fn preflight_json(input: &str, maximum_depth: usize) -> Result<(), PreflightError> {
     let mut deserializer = serde_json::Deserializer::from_str(input);
     StrictSeed::<false>::root(maximum_depth)
         .deserialize(&mut deserializer)
@@ -64,10 +61,7 @@ pub(crate) fn preflight_json(
         .map_err(|error| classify_decode("json", &error.to_string(), maximum_depth))
 }
 
-pub(crate) fn preflight_yaml(
-    input: &str,
-    maximum_depth: usize,
-) -> Result<(), PreflightError> {
+pub(crate) fn preflight_yaml(input: &str, maximum_depth: usize) -> Result<(), PreflightError> {
     validate_yaml_subset(input)?;
 
     let mut documents = serde_yaml_ng::Deserializer::from_str(input);
@@ -87,11 +81,7 @@ pub(crate) fn preflight_yaml(
     Ok(())
 }
 
-fn classify_decode(
-    format: &'static str,
-    message: &str,
-    maximum_depth: usize,
-) -> PreflightError {
+fn classify_decode(format: &'static str, message: &str, maximum_depth: usize) -> PreflightError {
     if message.contains(DUPLICATE_MAPPING_KEY_MARKER) {
         PreflightError::DuplicateMappingKey { format }
     } else if format == "yaml" && message.contains(MERGE_MAPPING_KEY_MARKER) {
@@ -297,9 +287,7 @@ impl<const REJECT_MERGE_KEY: bool> StrictSeed<REJECT_MERGE_KEY> {
     }
 }
 
-impl<'de, const REJECT_MERGE_KEY: bool> DeserializeSeed<'de>
-    for StrictSeed<REJECT_MERGE_KEY>
-{
+impl<'de, const REJECT_MERGE_KEY: bool> DeserializeSeed<'de> for StrictSeed<REJECT_MERGE_KEY> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -314,9 +302,7 @@ struct StrictValueVisitor<const REJECT_MERGE_KEY: bool> {
     seed: StrictSeed<REJECT_MERGE_KEY>,
 }
 
-impl<'de, const REJECT_MERGE_KEY: bool> Visitor<'de>
-    for StrictValueVisitor<REJECT_MERGE_KEY>
-{
+impl<'de, const REJECT_MERGE_KEY: bool> Visitor<'de> for StrictValueVisitor<REJECT_MERGE_KEY> {
     type Value = ();
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
