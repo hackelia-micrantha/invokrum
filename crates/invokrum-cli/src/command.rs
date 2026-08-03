@@ -69,7 +69,7 @@ fn validate(
                 .map_or_else(|| "all".to_owned(), ToString::to_string);
             format!("valid pack={} profile={}\n", loaded.pack.id, profile).into_bytes()
         }
-        OutputFormat::Json => json_line(json!({
+        OutputFormat::Json => json_line(&json!({
             "command": "validate",
             "ok": true,
             "pack": loaded.pack.id.to_string(),
@@ -133,7 +133,7 @@ fn verify_command(
                 text.into_bytes()
             }
         }
-        OutputFormat::Json => json_line(json!({
+        OutputFormat::Json => json_line(&json!({
             "command": "verify",
             "drifts": report.drifts().iter().map(|drift| drift_json(*drift)).collect::<Vec<_>>(),
             "verified": report.is_verified(),
@@ -169,7 +169,7 @@ fn diff(
                 text.into_bytes()
             }
         }
-        OutputFormat::Json => json_line(json!({
+        OutputFormat::Json => json_line(&json!({
             "changes": differences.iter().map(Difference::json).collect::<Vec<_>>(),
             "command": "diff",
             "different": !differences.is_empty(),
@@ -180,7 +180,9 @@ fn diff(
 
 fn deliver(bytes: &[u8], destination: &Destination) -> Result<Execution, CliError> {
     if let Some(path) = &destination.output {
-        output::write_atomic(path, bytes, destination.force).map_err(CliError::output)?;
+        output::write_atomic(path, bytes, destination.force).map_err(|error| {
+            CliError::output(format!("output `{}` failed: {error}", path.display()))
+        })?;
         Ok(Execution::success(Vec::new()))
     } else {
         Ok(Execution::success(bytes.to_vec()))
@@ -305,7 +307,7 @@ fn inspect_human(composition: &Composition) -> Vec<u8> {
 
 fn inspect_json(composition: &Composition) -> Result<Vec<u8>, CliError> {
     let manifest = composition.manifest();
-    json_line(json!({
+    json_line(&json!({
         "command": "inspect",
         "entries": manifest.entries.iter().map(|entry| json!({
             "byte_length": entry.byte_length,
@@ -321,8 +323,8 @@ fn inspect_json(composition: &Composition) -> Result<Vec<u8>, CliError> {
     }))
 }
 
-fn json_line(value: Value) -> Result<Vec<u8>, CliError> {
-    let mut bytes = serde_json::to_vec(&value)
+fn json_line(value: &Value) -> Result<Vec<u8>, CliError> {
+    let mut bytes = serde_json::to_vec(value)
         .map_err(|_| CliError::internal("failed to encode JSON output"))?;
     bytes.push(b'\n');
     Ok(bytes)
