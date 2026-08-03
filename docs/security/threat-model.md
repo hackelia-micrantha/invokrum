@@ -130,13 +130,13 @@ Status meanings:
 | T06 | Mutable remote content or substitution changes composition without review. | Partial | Current core and schema layers have no network access; future composition is required to remain offline. | Host acquisition policy; signed distribution requires explicit future design. |
 | T07 | Secret variables leak through diagnostics, manifests, lockfiles, stdout, logs, or crashes. | Planned | Sensitivity is represented; interpolation, redaction, and persistence controls remain. | Issues #4, #5, and #20. |
 | T08 | Hash, canonicalization, manifest, or lockfile confusion represents one artifact as another. | Planned | Exact-byte and compatibility requirements are documented; hashing is not implemented. | Issue #5. |
-| T09 | Pathological nesting, aliases, collection size, file size, or output expansion causes denial of service. | Partial | Identifiers and numeric schema fields are bounded; aggregate, document, file, alias, and output limits remain. | Issues #4, #20, and #27. |
+| T09 | Pathological nesting, collection size, file size, or output expansion causes denial of service. | Partial | Aliases and block scalars are rejected, and identifiers and numeric schema fields are bounded; aggregate, document, file, and output limits remain. | Issues #4 and #20. |
 | T10 | A host modifies rendered bytes but claims the original digest or verification. | Delegated | Architecture requires exact-byte binding and invalidates claims after transformation. | Host contract; issue #5 provides digest material. |
 | T11 | A host bypasses validation, reinterprets ordering, or invokes a runtime with different inputs. | Delegated | Stable adapter boundaries and composition-root rules are documented. | Host conformance work in issues #7 and #12. |
 | T12 | Parser, dependency, build, release, or artifact compromise changes behavior. | Partial | Pinned Rust toolchain, Cargo lockfile, strict CI, and a maintained YAML adapter are present. | Issue #8 for audits, action pinning, and release gates. |
-| T13 | Errors or source locations expose sensitive content or unstable parser internals. | Partial | Domain errors are typed and parser errors stay behind the schema boundary. | Issues #4 and #6 for stable redacted diagnostics. |
+| T13 | Errors or source locations expose sensitive content or unstable parser internals. | Partial | Domain errors are typed, parser errors stay behind the schema boundary, and parser-facing messages are bounded. | Issues #4 and #6 for stable redacted diagnostics. |
 | T14 | Self-referential, asymmetric, or inconsistent incompatibility rules produce surprising results. | Partial | References and duplicate list values are validated; complete compatibility evaluation remains. | Issue #4. |
-| T15 | Duplicate JSON or YAML mapping keys, aliases, merge keys, tags, or multi-document input create parser-dependent meaning. | Partial | Duplicate named struct fields are rejected by strict DTO decoding, but map-key behavior and the accepted YAML subset are not fully specified or tested. | Issue #27. |
+| T15 | Duplicate JSON or YAML mapping keys, aliases, merge keys, tags, or multi-document input create parser-dependent meaning. | Implemented | Recursive structural preflight rejects duplicate keys at every depth; the documented YAML subset rejects directives, aliases, anchors, merge keys, tags, block scalars, explicit complex keys, and multiple documents. | `invokrum-schema`; adversarial regression tests. |
 | T16 | Attacker-controlled paths or parser messages inject control characters into terminals, logs, or machine-output boundaries. | Partial | Identifiers are restricted to ASCII and paths reject NUL, but path controls and human-output escaping are incomplete. | Issues #4 and #6. |
 | T17 | Output paths cause clobbering, symlink following, unsafe permissions, partial writes, or stale artifacts after failure. | Planned | The CLI and persistent output adapters are not implemented. | Issue #6; output adapter tests required. |
 
@@ -168,7 +168,7 @@ An attacker declares `../../secret`, an absolute or Windows-style path, a symlin
 
 ### Ambiguous serialized input
 
-An attacker repeats a profile-selection key, uses a YAML merge key or alias, or supplies multiple YAML documents so parsers or versions derive different values. The schema boundary must define the accepted format subset and reject duplicate keys and unsupported features before a map can silently overwrite data.
+An attacker repeats a profile-selection key, uses a YAML merge key or alias, or supplies multiple YAML documents so parsers or versions could derive different values. The schema boundary recursively rejects duplicate mapping keys and excludes parser-expanding YAML features before schema-family negotiation or semantic mapping.
 
 ### Prompt injection in an approved-looking pack
 
@@ -200,7 +200,7 @@ A host appends instructions after verification and records the original digest. 
 
 ### Resource exhaustion
 
-A pack uses deep YAML, recursive aliases, large collections, oversized overlays, or expansion-heavy variables. Adapters must enforce documented limits before unbounded allocation or output growth and return stable errors without bulk attacker content.
+A pack uses deep nesting, large collections, oversized overlays, or expansion-heavy variables. YAML aliases and block scalars are not accepted, but adapters must still enforce documented byte, depth, collection, file, and output limits before unbounded allocation or growth and return stable errors without bulk attacker content.
 
 ## Responsibility matrix
 
