@@ -10,10 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "crates" / "invokrum-core"
 SCHEMA = ROOT / "crates" / "invokrum-schema"
 FILESYSTEM = ROOT / "crates" / "invokrum-fs"
+INTEGRITY = ROOT / "crates" / "invokrum-integrity"
 
 FORBIDDEN_CORE_DEPENDENCIES = {
     "clap",
     "invokrum-fs",
+    "invokrum-integrity",
     "invokrum-schema",
     "reqwest",
     "serde",
@@ -49,10 +51,18 @@ def require_inward_adapter(
     manifest = manifest_path.read_text(encoding="utf-8")
     if "invokrum-core" not in manifest:
         errors.append(f"{name} adapter must depend inward on invokrum-core")
-    if name == "filesystem" and "invokrum-schema" in manifest:
-        errors.append("filesystem adapter must not depend on the schema adapter")
-    if name == "schema" and "invokrum-fs" in manifest:
-        errors.append("schema adapter must not depend on the filesystem adapter")
+    if name == "filesystem" and any(
+        dependency in manifest for dependency in ["invokrum-integrity", "invokrum-schema"]
+    ):
+        errors.append("filesystem adapter must depend only on core workspace policy")
+    if name == "schema" and any(
+        dependency in manifest for dependency in ["invokrum-fs", "invokrum-integrity"]
+    ):
+        errors.append("schema adapter must not depend on filesystem or integrity adapters")
+    if name == "integrity" and any(
+        dependency in manifest for dependency in ["invokrum-fs", "invokrum-schema"]
+    ):
+        errors.append("integrity adapter must consume validated core values directly")
 
 
 def main() -> int:
@@ -65,6 +75,7 @@ def main() -> int:
 
     require_inward_adapter(errors, SCHEMA, "schema")
     require_inward_adapter(errors, FILESYSTEM, "filesystem")
+    require_inward_adapter(errors, INTEGRITY, "integrity")
 
     for source in sorted((CORE / "src").rglob("*.rs")):
         text = source.read_text(encoding="utf-8")
