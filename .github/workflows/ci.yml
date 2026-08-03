@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+  workflow_call:
 
 permissions:
   contents: read
@@ -13,13 +14,16 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   quality:
     name: Formatting and linting
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Check formatting
@@ -29,23 +33,71 @@ jobs:
 
   architecture:
     name: Architecture boundaries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Check dependency direction
         run: python3 scripts/check_architecture.py
-      - name: Test threat-model contract checker
-        run: python3 -m unittest tests/test_threat_model_contract.py
+      - name: Check immutable workflow action references
+        run: python3 scripts/check_workflow_pins.py
+      - name: Test repository policy checkers
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
       - name: Check threat-model contract
         run: python3 scripts/check_threat_model.py
+      - name: Check repository-local documentation links
+        run: python3 scripts/check_markdown_links.py
+
+  contract-changes:
+    name: Compatibility contract cochanges
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out complete pull-request history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Check compatibility documentation and tests
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/check_contract_changes.py --base "$BASE_SHA" --head HEAD
+
+  dependency-security:
+    name: Dependency, license, and secret policy
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out complete repository history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Install pinned cargo-deny
+        run: cargo install cargo-deny --version 0.19.7 --locked
+      - name: Audit advisories, licenses, bans, and sources
+        run: cargo deny check advisories bans licenses sources
+      - name: Install checksum-verified Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $archive" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP" gitleaks
+      - name: Scan complete Git history for secrets
+        run: >-
+          "$RUNNER_TEMP/gitleaks" git --redact --no-banner --no-color
+          --log-opts="--all" .
 
   unit:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Run unit tests
@@ -53,10 +105,10 @@ jobs:
 
   core-integration:
     name: Core integration tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Run core integration tests
@@ -64,10 +116,10 @@ jobs:
 
   filesystem-integration:
     name: Filesystem integration tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Run fail-closed filesystem tests
@@ -75,10 +127,10 @@ jobs:
 
   integrity-integration:
     name: Integrity integration tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Run lockfile and drift tests
@@ -86,10 +138,10 @@ jobs:
 
   schema-integration:
     name: Schema integration tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Install pinned schema validator
@@ -104,16 +156,39 @@ jobs:
             --schemafile schemas/invokrum-pack-v1.schema.json \
             tests/fixtures/schema/minimal-pack.json \
             tests/fixtures/schema/minimal-pack.yaml
-      - name: Run schema adapter integration tests
-        run: cargo test -p invokrum-schema --test integration --all-features --locked
+      - name: Run every schema adapter integration test
+        run: cargo test -p invokrum-schema --tests --all-features --locked
 
   e2e:
-    name: End-to-end tests
-    runs-on: ubuntu-latest
+    name: End-to-end and golden tests
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Install pinned Rust toolchain
         run: rustup show
-      - name: Run CLI end-to-end tests
-        run: cargo test -p invokrum-cli --test e2e --all-features --locked
+      - name: Run every CLI integration and golden test
+        run: cargo test -p invokrum-cli --tests --all-features --locked
+
+  portable:
+    name: Portable build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Install target
+        run: rustup target add ${{ matrix.target }}
+      - name: Run portable unit tests
+        run: cargo test --workspace --lib --all-features --locked
+      - name: Build release CLI for target
+        run: cargo build -p invokrum-cli --release --target ${{ matrix.target }} --locked
