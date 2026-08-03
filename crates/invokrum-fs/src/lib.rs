@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -29,6 +30,19 @@ pub enum LocalPackSourceError {
     RootSymbolicLink,
     RootNotDirectory,
 }
+
+impl fmt::Display for LocalPackSourceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::UnsupportedPlatform => "local pack sources are supported on Linux only",
+            Self::RootUnavailable => "pack root is unavailable",
+            Self::RootSymbolicLink => "pack root must not be a symbolic link",
+            Self::RootNotDirectory => "pack root must be a directory",
+        })
+    }
+}
+
+impl std::error::Error for LocalPackSourceError {}
 
 /// A local source adapter rooted at one canonical directory.
 #[derive(Clone, Debug)]
