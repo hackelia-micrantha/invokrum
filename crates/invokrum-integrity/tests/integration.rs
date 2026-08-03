@@ -6,8 +6,8 @@ use invokrum_core::{
     Variable, compose,
 };
 use invokrum_integrity::{
-    DriftKind, IntegrityError, Sha256Digester, build_lockfile, decode_lockfile, encode_lockfile,
-    verify,
+    DriftKind, IntegrityError, MAX_LOCKED_OVERLAYS, MAX_LOCKFILE_BYTES, Sha256Digester,
+    build_lockfile, decode_lockfile, encode_lockfile, verify,
 };
 
 fn id(value: &str) -> Identifier {
@@ -112,6 +112,13 @@ fn composition(pack: &OverlayPack, source: &MemorySource) -> Composition {
         .expect("composition should succeed")
 }
 
+fn lockfile() -> (OverlayPack, Composition, invokrum_integrity::Lockfile) {
+    let pack = pack(false, false);
+    let composition = composition(&pack, &sources(b"review"));
+    let lock = build_lockfile(&pack, &composition, &Sha256Digester).expect("lock should build");
+    (pack, composition, lock)
+}
+
 #[test]
 fn equivalent_declaration_order_produces_identical_lock_bytes() {
     let first_pack = pack(false, false);
@@ -182,13 +189,7 @@ fn verification_reports_configuration_and_overlay_set_drift() {
 
 #[test]
 fn unsupported_versions_and_tampered_manifests_fail_before_drift_comparison() {
-    let pack = pack(false, false);
-    let lock = build_lockfile(
-        &pack,
-        &composition(&pack, &sources(b"review")),
-        &Sha256Digester,
-    )
-    .expect("lock should build");
+    let (_, _, lock) = lockfile();
     let encoded = String::from_utf8(encode_lockfile(&lock).expect("lock should encode"))
         .expect("lock should be UTF-8");
 
@@ -206,14 +207,54 @@ fn unsupported_versions_and_tampered_manifests_fail_before_drift_comparison() {
 }
 
 #[test]
+fn noncanonical_and_ambiguous_json_are_rejected() {
+    let (_, _, lock) = lockfile();
+    let encoded = String::from_utf8(encode_lockfile(&lock).expect("lock should encode"))
+        .expect("lock should be UTF-8");
+
+    let with_trailing_newline = format!("{encoded}\n");
+    assert_eq!(
+        decode_lockfile(with_trailing_newline.as_bytes()),
+        Err(IntegrityError::NonCanonicalEncoding)
+    );
+
+    let duplicate_format = encoded.replacen(
+        "{\"format\":",
+        "{\"format\":\"invokrum.lock/v1\",\"format\":",
+        1,
+    );
+    assert_eq!(
+        decode_lockfile(duplicate_format.as_bytes()),
+        Err(IntegrityError::Decode)
+    );
+}
+
+#[test]
+fn lockfile_resource_and_identity_limits_fail_closed() {
+    assert_eq!(
+        decode_lockfile(&vec![b' '; MAX_LOCKFILE_BYTES + 1]),
+        Err(IntegrityError::LockfileTooLarge)
+    );
+
+    let (_, _, mut too_many) = lockfile();
+    let overlay = too_many.manifest.overlays[0].clone();
+    too_many.manifest.overlays = vec![overlay; MAX_LOCKED_OVERLAYS + 1];
+    assert_eq!(
+        encode_lockfile(&too_many),
+        Err(IntegrityError::TooManyOverlays)
+    );
+
+    let (_, _, mut invalid_identity) = lockfile();
+    invalid_identity.manifest.pack.id = "invalid\nidentity".to_owned();
+    assert_eq!(
+        encode_lockfile(&invalid_identity),
+        Err(IntegrityError::InvalidIdentity)
+    );
+}
+
+#[test]
 fn lockfile_contains_no_sensitive_variable_names_or_values() {
-    let pack = pack(false, false);
-    let lock = build_lockfile(
-        &pack,
-        &composition(&pack, &sources(b"review")),
-        &Sha256Digester,
-    )
-    .expect("lock should build");
+    let (_, _, lock) = lockfile();
     let encoded = String::from_utf8(encode_lockfile(&lock).expect("lock should encode"))
         .expect("lock should be UTF-8");
 
@@ -223,9 +264,7 @@ fn lockfile_contains_no_sensitive_variable_names_or_values() {
 
 #[test]
 fn canonical_lockfile_round_trips_and_verifies() {
-    let pack = pack(false, false);
-    let composition = composition(&pack, &sources(b"review"));
-    let lock = build_lockfile(&pack, &composition, &Sha256Digester).expect("lock should build");
+    let (pack, composition, lock) = lockfile();
     let encoded = encode_lockfile(&lock).expect("lock should encode");
     let decoded = decode_lockfile(&encoded).expect("lock should decode");
     let report = verify(&decoded, &pack, &composition).expect("verification should run");
