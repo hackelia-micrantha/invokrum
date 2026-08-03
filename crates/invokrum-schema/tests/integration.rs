@@ -91,7 +91,10 @@ fn machine_schema_is_valid_json_and_bound_to_the_runtime_family() {
     let schema_text = include_str!("../../../schemas/invokrum-pack-v1.schema.json");
     let schema: Value = serde_json::from_str(schema_text).expect("schema should be valid JSON");
 
-    assert_eq!(schema["$schema"], "https://json-schema.org/draft/2020-12/schema");
+    assert_eq!(
+        schema["$schema"],
+        "https://json-schema.org/draft/2020-12/schema"
+    );
     assert_eq!(schema["properties"]["schema"]["const"], SCHEMA_FAMILY);
     assert_eq!(schema["additionalProperties"], false);
 
