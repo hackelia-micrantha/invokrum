@@ -73,6 +73,17 @@ jobs:
       - name: Run fail-closed filesystem tests
         run: cargo test -p invokrum-fs --tests --all-features --locked
 
+  integrity-integration:
+    name: Integrity integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Run lockfile and drift tests
+        run: cargo test -p invokrum-integrity --tests --all-features --locked
+
   schema-integration:
     name: Schema integration tests
     runs-on: ubuntu-latest
