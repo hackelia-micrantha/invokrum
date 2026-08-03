@@ -43,7 +43,8 @@ ALLOWED_STATUSES = {
     "Out of scope",
 }
 EXPECTED_THREATS = {f"T{number:02d}" for number in range(1, 18)}
-THREAT_ROW_START = re.compile(r"^\|\s*T\d{2}\s*\|")
+THREAT_ROW_START = re.compile(r"^\|\s*T[^|]*\|")
+THREAT_ID = re.compile(r"^T\d{2}$")
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,7 @@ class ThreatRow:
 
 
 def parse_threat_rows(text: str) -> tuple[list[ThreatRow], list[str]]:
-    """Parse all threat-looking table rows without hiding invalid statuses."""
+    """Parse all threat-looking table rows without hiding malformed values."""
     rows: list[ThreatRow] = []
     errors: list[str] = []
 
@@ -72,6 +73,11 @@ def parse_threat_rows(text: str) -> tuple[list[ThreatRow], list[str]]:
             continue
 
         threat_id, _description, status, control, owner = cells
+        if not THREAT_ID.fullmatch(threat_id):
+            errors.append(
+                f"invalid threat ID `{threat_id}` on line {line_number}; expected T followed by two digits"
+            )
+
         rows.append(
             ThreatRow(
                 threat_id=threat_id,
