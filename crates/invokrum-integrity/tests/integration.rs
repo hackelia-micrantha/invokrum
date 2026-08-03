@@ -158,11 +158,7 @@ fn equivalent_declaration_order_produces_identical_lock_bytes() {
 fn lock_construction_returns_only_encodable_v1_material() {
     let (current_pack, current_composition, _) = lockfile();
     assert_eq!(
-        build_lockfile(
-            &current_pack,
-            &current_composition,
-            &UnsupportedDigester,
-        ),
+        build_lockfile(&current_pack, &current_composition, &UnsupportedDigester,),
         Err(IntegrityError::UnsupportedDigestAlgorithm)
     );
 
