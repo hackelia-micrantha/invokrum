@@ -35,7 +35,7 @@ fn fixture() -> TestDirectory {
     let directory = TestDirectory::new();
     fs::write(
         directory.path().join("pack.yaml"),
-        r#"schema: invokrum.dev/v1
+        r"schema: invokrum.dev/v1
 id: example
 classes:
   - id: core
@@ -63,7 +63,7 @@ profiles:
 variables:
   - name: api-token
     sensitivity: secret
-"#,
+",
     )
     .expect("pack should be written");
     fs::write(directory.path().join("core.md"), b"core").expect("core overlay should be written");
@@ -344,11 +344,8 @@ fn diagnostics_escape_controls_and_never_pollute_stdout() {
 
     assert_eq!(result.status.code(), Some(invokrum_cli::EXIT_USAGE));
     assert!(result.stdout.is_empty());
-    assert_eq!(
-        result.stderr.iter().filter(|byte| **byte == b'\n').count(),
-        1
-    );
     let stderr = String::from_utf8(result.stderr).expect("stderr should be UTF-8");
+    assert_eq!(stderr.lines().count(), 1);
     assert!(stderr.contains("bad\\ncommand"));
     assert!(!stderr.contains("\u{1b}["));
 }
