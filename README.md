@@ -10,12 +10,12 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-2f7d65.svg"></a>
-  <img alt="Project status: schema baseline" src="https://img.shields.io/badge/status-schema%20baseline-355f7d.svg">
+  <img alt="Project status: composition baseline" src="https://img.shields.io/badge/status-composition%20baseline-355f7d.svg">
   <img alt="Implementation language: Rust" src="https://img.shields.io/badge/language-Rust-b7410e.svg">
 </p>
 
 > [!IMPORTANT]
-> Invokrum has an implemented domain model, strict v1 YAML/JSON schema adapter, and layered test baseline. Composition, rendering, lockfiles, attestations, and the proposed CLI commands are not yet complete.
+> Invokrum has an implemented domain model, strict v1 YAML/JSON schema adapter, deterministic composition use case, and fail-closed Linux filesystem adapter. CLI composition, hashing, lockfiles, and attestations are not yet complete.
 
 ## What is Invokrum?
 
@@ -37,6 +37,7 @@ The goal is not another prompt-template manager. Invokrum is intended to provide
 - [Purpose and scope](docs/purpose.md)
 - [Use cases](docs/use-cases.md)
 - [Architecture](docs/architecture/README.md)
+- [Deterministic composition and filesystem contract](docs/composition-and-filesystem.md)
 - [Threat model and trust boundaries](docs/security/threat-model.md)
 - [V1 schema contract](docs/schema-v1.md)
 - [Configuration](docs/configuration.md)
@@ -81,16 +82,16 @@ The mechanism-versus-policy boundary is documented in [ADR-0001](docs/architectu
 ┌────────────────────────────▼─────────────────────────────┐
 │ invokrum-cli                                              │
 │ delivery, diagnostics, exit codes, composition root      │
-└────────────────────────────┬─────────────────────────────┘
-                             │ format adapter
-┌────────────────────────────▼─────────────────────────────┐
-│ invokrum-schema                                           │
-│ strict YAML/JSON DTOs · version negotiation · encoding   │
-└────────────────────────────┬─────────────────────────────┘
-                             │ validated domain values
-┌────────────────────────────▼─────────────────────────────┐
+└───────────────┬──────────────────────────┬───────────────┘
+                │ format adapter           │ source adapter
+┌───────────────▼────────────────┐  ┌──────▼───────────────┐
+│ invokrum-schema                │  │ invokrum-fs          │
+│ strict YAML/JSON DTOs          │  │ bounded Linux reads  │
+└───────────────┬────────────────┘  └──────┬───────────────┘
+                │ validated values         │ stable bytes
+┌───────────────▼──────────────────────────▼───────────────┐
 │ invokrum-core                                             │
-│ model · invariants · deterministic normalization         │
+│ model · invariants · composition port/use case · manifest│
 └────────────────────────────┬─────────────────────────────┘
                              │
 ┌────────────────────────────▼─────────────────────────────┐
@@ -99,10 +100,11 @@ The mechanism-versus-policy boundary is documented in [ADR-0001](docs/architectu
 └──────────────────────────────────────────────────────────┘
 ```
 
-The workspace uses durable boundaries rather than placing serialization inside the domain:
+The workspace uses durable boundaries rather than placing serialization or filesystem access inside application policy:
 
-- `invokrum-core` owns parsing-neutral domain types and engine behavior;
+- `invokrum-core` owns parsing-neutral domain types, the source port, deterministic resolution, compatibility evaluation, limits, ordered segments, and the in-memory-testable composition use case;
 - `invokrum-schema` translates strict YAML/JSON documents into the domain model;
+- `invokrum-fs` implements the source port with a fail-closed Linux local-filesystem policy;
 - `invokrum-cli` owns delivery concerns and will wire concrete adapters.
 
 ## V1 pack format
@@ -178,6 +180,8 @@ The active backlog is tracked in [GitHub Issues](https://github.com/hackelia-mic
 Prompt overlays are configuration and potentially untrusted content. Invokrum assumes hostile or malformed inputs, but structural validation is not semantic approval and exact-byte integrity is not authorization.
 
 The accepted [threat model and trust boundaries](docs/security/threat-model.md) identify assets, actors, abuse cases, delegated host responsibilities, and the current status of each control. Only controls marked **Implemented** and backed by executable validation should be treated as present. Controls marked **Partial** or **Planned** are not production guarantees.
+
+The local filesystem contract currently supports Linux only and requires a stable host mount namespace. See [deterministic composition and filesystem contract](docs/composition-and-filesystem.md).
 
 See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
