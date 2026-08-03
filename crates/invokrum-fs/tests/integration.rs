@@ -83,10 +83,7 @@ fn replacing_the_pack_root_is_rejected() {
 
     assert_eq!(
         source.load(&path("overlay.md"), 32),
-        Err(failure(
-            "overlay.md",
-            SourceFailureKind::ChangedDuringRead
-        ))
+        Err(failure("overlay.md", SourceFailureKind::ChangedDuringRead))
     );
 }
 
