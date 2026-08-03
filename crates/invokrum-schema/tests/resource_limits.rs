@@ -3,8 +3,7 @@ use invokrum_schema::{
     parse_yaml_with_limits,
 };
 
-const MINIMAL_JSON: &str =
-    r#"{"schema":"invokrum.dev/v1","id":"example","classes":[]}"#;
+const MINIMAL_JSON: &str = r#"{"schema":"invokrum.dev/v1","id":"example","classes":[]}"#;
 const MINIMAL_YAML: &str = "schema: invokrum.dev/v1\nid: example\nclasses: []\n";
 
 const DECLARATION_JSON: &str = r#"{
@@ -64,7 +63,11 @@ variables:
     sensitivity: secret
 ";
 
-fn limits(document_bytes: usize, nesting_depth: usize, declarations: DeclarationLimits) -> SchemaLimits {
+fn limits(
+    document_bytes: usize,
+    nesting_depth: usize,
+    declarations: DeclarationLimits,
+) -> SchemaLimits {
     SchemaLimits::new(document_bytes, nesting_depth, declarations)
 }
 
