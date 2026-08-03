@@ -211,13 +211,19 @@ impl fmt::Display for CompositionError {
         match self {
             Self::UnknownProfile(profile) => write!(formatter, "unknown profile `{profile}`"),
             Self::MissingOverlay(overlay) => {
-                write!(formatter, "validated profile references missing overlay `{overlay}`")
+                write!(
+                    formatter,
+                    "validated profile references missing overlay `{overlay}`"
+                )
             }
             Self::TooManyOverlays { count, maximum } => {
                 write!(formatter, "selected {count} overlays; maximum is {maximum}")
             }
             Self::IncompatibleOverlays { overlay, other } => {
-                write!(formatter, "overlay `{overlay}` is incompatible with `{other}`")
+                write!(
+                    formatter,
+                    "overlay `{overlay}` is incompatible with `{other}`"
+                )
             }
             Self::OverlayTooLarge {
                 overlay,
@@ -228,9 +234,14 @@ impl fmt::Display for CompositionError {
                 "overlay `{overlay}` contains {size} bytes; maximum is {maximum}"
             ),
             Self::OutputTooLarge { size, maximum } => {
-                write!(formatter, "normalized output requires {size} bytes; maximum is {maximum}")
+                write!(
+                    formatter,
+                    "normalized output requires {size} bytes; maximum is {maximum}"
+                )
             }
-            Self::Source(failure) => write!(formatter, "overlay source was rejected: {}", failure.kind),
+            Self::Source(failure) => {
+                write!(formatter, "overlay source was rejected: {}", failure.kind)
+            }
         }
     }
 }
@@ -310,12 +321,13 @@ pub fn compose(
             });
         }
 
-        source_bytes = source_bytes
-            .checked_add(bytes.len())
-            .ok_or(CompositionError::OutputTooLarge {
-                size: usize::MAX,
-                maximum: limits.maximum_output_bytes,
-            })?;
+        source_bytes =
+            source_bytes
+                .checked_add(bytes.len())
+                .ok_or(CompositionError::OutputTooLarge {
+                    size: usize::MAX,
+                    maximum: limits.maximum_output_bytes,
+                })?;
         let separator_bytes = usize::from(!entries.is_empty()) * 2;
         let required = normalized_context
             .len()
