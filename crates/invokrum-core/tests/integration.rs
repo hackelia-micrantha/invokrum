@@ -116,3 +116,30 @@ fn pack_rejects_profile_selection_from_the_wrong_class() {
         Err(DomainError::OverlayClassMismatch { .. })
     ));
 }
+
+#[test]
+fn pack_rejects_profile_that_omits_a_required_class() {
+    let classes = vec![OverlayClass {
+        id: id("core"),
+        order: 10,
+        cardinality: Cardinality::new(1, Some(1)).expect("valid cardinality"),
+    }];
+    let profile = Profile {
+        id: id("invalid"),
+        selections: BTreeMap::new(),
+    };
+
+    let result = OverlayPack::new(
+        id("example"),
+        SCHEMA_FAMILY,
+        classes,
+        Vec::new(),
+        vec![profile],
+        Vec::new(),
+    );
+
+    assert!(matches!(
+        result,
+        Err(DomainError::CardinalityViolation { count: 0, .. })
+    ));
+}
