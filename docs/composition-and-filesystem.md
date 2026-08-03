@@ -43,7 +43,7 @@ For each overlay it:
 2. walks every declared path component with `symlink_metadata`;
 3. rejects symbolic links at every component;
 4. rejects intermediate non-directories;
-5. rejects a device change from the established root, including ordinary mount-point crossings;
+5. rejects filesystem device changes from the established root;
 6. canonicalizes the candidate and verifies component-aware containment below the root;
 7. requires a regular file with exactly one hard link;
 8. opens the file and verifies that the opened device/inode matches the pre-open candidate;
@@ -61,7 +61,14 @@ Windows junction and reparse-point behavior is not approximated. Non-Linux platf
 
 ## Host preconditions and residual risk
 
-The adapter cannot prove a trustworthy filesystem namespace against a privileged actor that can remap mounts during the operation. The host must provide a stable mount namespace, mounted procfs with working `/proc/self/fd`, and a pack-root parent that prevents unauthorized rename or replacement attempts. Root device/inode checks make replacement fail closed once detected.
+The adapter cannot prove a trustworthy filesystem namespace against a privileged actor that can remap mounts during the operation. The host must provide:
+
+- a stable mount namespace;
+- mounted procfs with working `/proc/self/fd`;
+- a pack-root parent that prevents unauthorized root rename or replacement;
+- no pre-existing same-device bind mount or equivalent namespace alias below the selected root.
+
+Device-ID checks detect cross-device mount boundaries but do not identify same-device bind mounts. Root device/inode checks make path replacement fail closed once detected, but they do not replace the namespace preconditions above.
 
 A hostile kernel, `/proc` implementation, filesystem, or privileged mount-namespace controller remains outside the v0.1 guarantee. Filesystems whose metadata does not provide stable Linux device/inode/time semantics may fail closed or require a future specialized adapter.
 
