@@ -142,8 +142,9 @@ pub fn parse_yaml(input: &str) -> Result<OverlayPack, SchemaError> {
 ///
 /// Returns [`SchemaError`] if serialization unexpectedly fails.
 pub fn to_normalized_json(pack: &OverlayPack) -> Result<String, SchemaError> {
-    serde_json::to_string_pretty(&PackDocument::from(pack))
-        .map_err(|error| SchemaError::Encode(bounded_text(&error.to_string(), MAX_ERROR_MESSAGE_CHARS)))
+    serde_json::to_string_pretty(&PackDocument::from(pack)).map_err(|error| {
+        SchemaError::Encode(bounded_text(&error.to_string(), MAX_ERROR_MESSAGE_CHARS))
+    })
 }
 
 fn ensure_supported_schema(schema: &str) -> Result<(), SchemaError> {
@@ -362,9 +363,7 @@ impl From<PreflightError> for SchemaError {
     fn from(error: PreflightError) -> Self {
         match error {
             PreflightError::Decode { format, message } => Self::Decode { format, message },
-            PreflightError::DuplicateMappingKey { format } => {
-                Self::DuplicateMappingKey { format }
-            }
+            PreflightError::DuplicateMappingKey { format } => Self::DuplicateMappingKey { format },
             PreflightError::UnsupportedYamlFeature(feature) => {
                 Self::UnsupportedYamlFeature(feature)
             }
