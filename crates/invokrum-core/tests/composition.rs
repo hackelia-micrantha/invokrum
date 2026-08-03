@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use invokrum_core::{
     Cardinality, CompositionError, CompositionLimits, Identifier, Overlay, OverlayClass,
-    OverlayPack, OverlaySource, PackRelativePath, Profile, SourceFailure, SourceFailureKind, compose,
+    OverlayPack, OverlaySource, PackRelativePath, Profile, SourceFailure, SourceFailureKind,
+    compose,
 };
 
 fn id(value: &str) -> Identifier {
@@ -75,9 +76,10 @@ impl OverlaySource for MemorySource {
         source: &PackRelativePath,
         maximum_bytes: usize,
     ) -> Result<Vec<u8>, SourceFailure> {
-        let bytes = self.files.get(source).ok_or_else(|| {
-            SourceFailure::new(source.clone(), SourceFailureKind::NotFound)
-        })?;
+        let bytes = self
+            .files
+            .get(source)
+            .ok_or_else(|| SourceFailure::new(source.clone(), SourceFailureKind::NotFound))?;
         if bytes.len() > maximum_bytes {
             return Err(SourceFailure::new(
                 source.clone(),
