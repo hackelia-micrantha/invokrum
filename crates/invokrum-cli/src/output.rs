@@ -134,10 +134,7 @@ fn pin_parent(parent: &Path) -> Result<Metadata, OutputError> {
 #[cfg(target_os = "linux")]
 fn verify_parent_identity(parent: &Path, pinned: &Metadata) -> Result<(), OutputError> {
     let current = fs::symlink_metadata(parent).map_err(|_| OutputError::ParentChanged)?;
-    if current.file_type().is_symlink()
-        || !current.is_dir()
-        || !same_identity(&current, pinned)
-    {
+    if current.file_type().is_symlink() || !current.is_dir() || !same_identity(&current, pinned) {
         Err(OutputError::ParentChanged)
     } else {
         Ok(())
