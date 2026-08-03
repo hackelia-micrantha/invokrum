@@ -14,10 +14,8 @@ struct TestDirectory(PathBuf);
 impl TestDirectory {
     fn new() -> Self {
         let sequence = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "invokrum-cli-{}-{sequence}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("invokrum-cli-{}-{sequence}", std::process::id()));
         fs::create_dir_all(&path).expect("test directory should be created");
         Self(path)
     }
@@ -147,7 +145,13 @@ fn validate_compose_and_inspect_run_fully_offline() {
         serde_json::from_slice(&inspect.stdout).expect("inspect output should be JSON");
     assert_eq!(manifest["pack"], "example");
     assert_eq!(manifest["profile"], "default");
-    assert_eq!(manifest["entries"].as_array().expect("entries should be an array").len(), 2);
+    assert_eq!(
+        manifest["entries"]
+            .as_array()
+            .expect("entries should be an array")
+            .len(),
+        2
+    );
 }
 
 #[test]
@@ -205,7 +209,13 @@ fn lock_verify_and_diff_distinguish_repository_drift() {
     let report: serde_json::Value =
         serde_json::from_slice(&drift.stdout).expect("drift output should be JSON");
     assert_eq!(report["verified"], false);
-    assert_eq!(report["drifts"].as_array().expect("drifts should be an array").len(), 2);
+    assert_eq!(
+        report["drifts"]
+            .as_array()
+            .expect("drifts should be an array")
+            .len(),
+        2
+    );
 
     let candidate_lock = invoke(vec![
         argument("lock"),
@@ -251,7 +261,10 @@ fn output_is_private_atomic_and_never_clobbered_implicitly() {
     assert!(first.status.success());
     assert!(first.stdout.is_empty());
     assert!(first.stderr.is_empty());
-    assert_eq!(fs::read(&output_path).expect("output should exist"), b"core\n\nreview");
+    assert_eq!(
+        fs::read(&output_path).expect("output should exist"),
+        b"core\n\nreview"
+    );
     assert_eq!(
         fs::metadata(&output_path)
             .expect("output metadata should exist")
@@ -275,7 +288,10 @@ fn output_is_private_atomic_and_never_clobbered_implicitly() {
     assert_eq!(rejected.status.code(), Some(invokrum_cli::EXIT_OUTPUT));
     assert!(rejected.stdout.is_empty());
     assert!(String::from_utf8_lossy(&rejected.stderr).contains("error[output]"));
-    assert_eq!(fs::read(&output_path).expect("output should remain"), b"core\n\nreview");
+    assert_eq!(
+        fs::read(&output_path).expect("output should remain"),
+        b"core\n\nreview"
+    );
 
     let replaced = invoke(vec![
         argument("compose"),
@@ -288,7 +304,10 @@ fn output_is_private_atomic_and_never_clobbered_implicitly() {
         argument("--force"),
     ]);
     assert!(replaced.status.success());
-    assert_eq!(fs::read(&output_path).expect("output should be replaced"), b"core\n\nchanged");
+    assert_eq!(
+        fs::read(&output_path).expect("output should be replaced"),
+        b"core\n\nchanged"
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -313,7 +332,10 @@ fn symbolic_link_output_targets_are_rejected_without_touching_the_target() {
     ]);
     assert_eq!(result.status.code(), Some(invokrum_cli::EXIT_OUTPUT));
     assert!(result.stdout.is_empty());
-    assert_eq!(fs::read(&real_target).expect("target should remain"), b"protected");
+    assert_eq!(
+        fs::read(&real_target).expect("target should remain"),
+        b"protected"
+    );
 }
 
 #[test]
