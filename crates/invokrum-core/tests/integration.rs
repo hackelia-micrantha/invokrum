@@ -13,38 +13,33 @@ fn path(value: &str) -> PackRelativePath {
     PackRelativePath::parse(value).expect("test path should be valid")
 }
 
+fn class(name: &str, order: u32, minimum: u32, maximum: Option<u32>) -> OverlayClass {
+    OverlayClass {
+        id: id(name),
+        order,
+        cardinality: Cardinality::new(minimum, maximum).expect("valid cardinality"),
+    }
+}
+
+fn overlay(name: &str, class_name: &str) -> Overlay {
+    Overlay {
+        id: id(name),
+        class: id(class_name),
+        source: path(&format!("overlays/{name}.md")),
+        incompatible_with: BTreeSet::new(),
+    }
+}
+
 #[test]
 fn pack_construction_normalizes_declared_class_order() {
     let classes = vec![
-        OverlayClass {
-            id: id("quality"),
-            order: 30,
-            cardinality: Cardinality::new(0, None).expect("valid cardinality"),
-        },
-        OverlayClass {
-            id: id("core"),
-            order: 10,
-            cardinality: Cardinality::new(1, Some(1)).expect("valid cardinality"),
-        },
-        OverlayClass {
-            id: id("mode"),
-            order: 20,
-            cardinality: Cardinality::new(1, Some(1)).expect("valid cardinality"),
-        },
+        class("quality", 30, 0, None),
+        class("core", 10, 1, Some(1)),
+        class("mode", 20, 1, Some(1)),
     ];
     let overlays = vec![
-        Overlay {
-            id: id("read-only"),
-            class: id("mode"),
-            source: path("overlays/read-only.md"),
-            incompatible_with: BTreeSet::new(),
-        },
-        Overlay {
-            id: id("core-default"),
-            class: id("core"),
-            source: path("overlays/core.md"),
-            incompatible_with: BTreeSet::new(),
-        },
+        overlay("read-only", "mode"),
+        overlay("core-default", "core"),
     ];
     let profile = Profile {
         id: id("review"),
@@ -80,25 +75,33 @@ fn pack_construction_normalizes_declared_class_order() {
 }
 
 #[test]
+fn pack_rejects_duplicate_declarations() {
+    let duplicate = overlay("same", "core");
+    let result = OverlayPack::new(
+        id("example"),
+        "test/v1",
+        vec![class("core", 10, 0, None)],
+        vec![duplicate.clone(), duplicate],
+        Vec::new(),
+        Vec::new(),
+    );
+
+    assert!(matches!(
+        result,
+        Err(DomainError::DuplicateIdentifier {
+            kind: "overlay",
+            ..
+        })
+    ));
+}
+
+#[test]
 fn pack_rejects_profile_selection_from_the_wrong_class() {
     let classes = vec![
-        OverlayClass {
-            id: id("core"),
-            order: 10,
-            cardinality: Cardinality::new(0, None).expect("valid cardinality"),
-        },
-        OverlayClass {
-            id: id("mode"),
-            order: 20,
-            cardinality: Cardinality::new(0, None).expect("valid cardinality"),
-        },
+        class("core", 10, 0, None),
+        class("mode", 20, 0, None),
     ];
-    let overlays = vec![Overlay {
-        id: id("read-only"),
-        class: id("mode"),
-        source: path("overlays/read-only.md"),
-        incompatible_with: BTreeSet::new(),
-    }];
+    let overlays = vec![overlay("read-only", "mode")];
     let profile = Profile {
         id: id("invalid"),
         selections: BTreeMap::from([(id("core"), vec![id("read-only")])]),
@@ -121,11 +124,6 @@ fn pack_rejects_profile_selection_from_the_wrong_class() {
 
 #[test]
 fn pack_rejects_profile_that_omits_a_required_class() {
-    let classes = vec![OverlayClass {
-        id: id("core"),
-        order: 10,
-        cardinality: Cardinality::new(1, Some(1)).expect("valid cardinality"),
-    }];
     let profile = Profile {
         id: id("invalid"),
         selections: BTreeMap::new(),
@@ -134,7 +132,7 @@ fn pack_rejects_profile_that_omits_a_required_class() {
     let result = OverlayPack::new(
         id("example"),
         "test/v1",
-        classes,
+        vec![class("core", 10, 1, Some(1))],
         Vec::new(),
         vec![profile],
         Vec::new(),
@@ -143,5 +141,82 @@ fn pack_rejects_profile_that_omits_a_required_class() {
     assert!(matches!(
         result,
         Err(DomainError::CardinalityViolation { count: 0, .. })
+    ));
+}
+
+#[test]
+fn pack_rejects_profile_above_maximum_cardinality() {
+    let profile = Profile {
+        id: id("invalid"),
+        selections: BTreeMap::from([(
+            id("mode"),
+            vec![id("read-only"), id("write-enabled")],
+        )]),
+    };
+
+    let result = OverlayPack::new(
+        id("example"),
+        "test/v1",
+        vec![class("mode", 10, 0, Some(1))],
+        vec![
+            overlay("read-only", "mode"),
+            overlay("write-enabled", "mode"),
+        ],
+        vec![profile],
+        Vec::new(),
+    );
+
+    assert!(matches!(
+        result,
+        Err(DomainError::CardinalityViolation { count: 2, .. })
+    ));
+}
+
+#[test]
+fn pack_rejects_duplicate_profile_selection() {
+    let profile = Profile {
+        id: id("invalid"),
+        selections: BTreeMap::from([(
+            id("mode"),
+            vec![id("read-only"), id("read-only")],
+        )]),
+    };
+
+    let result = OverlayPack::new(
+        id("example"),
+        "test/v1",
+        vec![class("mode", 10, 0, None)],
+        vec![overlay("read-only", "mode")],
+        vec![profile],
+        Vec::new(),
+    );
+
+    assert!(matches!(
+        result,
+        Err(DomainError::DuplicateProfileSelection(identifier))
+            if identifier == id("read-only")
+    ));
+}
+
+#[test]
+fn pack_rejects_dangling_profile_selection() {
+    let profile = Profile {
+        id: id("invalid"),
+        selections: BTreeMap::from([(id("mode"), vec![id("missing")])]),
+    };
+
+    let result = OverlayPack::new(
+        id("example"),
+        "test/v1",
+        vec![class("mode", 10, 0, None)],
+        Vec::new(),
+        vec![profile],
+        Vec::new(),
+    );
+
+    assert!(matches!(
+        result,
+        Err(DomainError::UnknownOverlayReference(identifier))
+            if identifier == id("missing")
     ));
 }
