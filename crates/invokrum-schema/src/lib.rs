@@ -336,8 +336,12 @@ impl fmt::Display for SchemaError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Decode { format, message } => write!(formatter, "invalid {format}: {message}"),
-            Self::Encode(message) => write!(formatter, "failed to encode normalized JSON: {message}"),
-            Self::UnsupportedSchema(schema) => write!(formatter, "unsupported schema family: {schema}"),
+            Self::Encode(message) => {
+                write!(formatter, "failed to encode normalized JSON: {message}")
+            }
+            Self::UnsupportedSchema(schema) => {
+                write!(formatter, "unsupported schema family: {schema}")
+            }
             Self::DuplicateListValue { field, value } => {
                 write!(formatter, "duplicate value `{value}` in {field}")
             }
