@@ -89,6 +89,8 @@ Canonical containment still cannot prove provenance against a privileged actor t
 
 YAML and JSON are attacker-controlled. The schema adapter owns syntax decoding, schema-family negotiation, unknown-field rejection, duplicate-key behavior, an explicitly accepted YAML feature subset, format limits, and mapping into validated domain values. JSON Schema validation alone cannot detect duplicate object keys after a parser has collapsed them.
 
+The default v1 policy rejects documents over 1 MiB before scanning or deserialization, limits recursive mapping/sequence depth to 32, and bounds class, overlay, profile, variable, selection, and incompatibility declarations before domain aggregate construction. Hosts may inject tighter immutable limits. Raising limits transfers memory and latency risk to the host.
+
 ### Boundary D — schema adapter to core domain
 
 Only validated value objects and aggregates cross into core. Core owns deterministic ordering, references, class membership, cardinality, compatibility invariants, and stable domain failures. It performs no I/O and parses no external formats.
@@ -111,13 +113,16 @@ Rendered prompt content remains untrusted text. The host owns authorization, run
 
 ### Boundary H — application and integrity results to CLI and evidence sinks
 
-Output destinations may be attacker-controlled or security-sensitive. The delivery layer owns terminal-safe diagnostics, machine-output encoding, no-follow and overwrite policy, destination permissions, atomic replacement where applicable, cleanup after failure, and preventing partial or stale output from being mistaken for a successful result.
+Output destinations may be attacker-controlled or security-sensitive. The CLI keeps raw context and canonical lock bytes separate from diagnostics, emits versioned machine JSON, visibly encodes control characters in human diagnostics, and writes persistent output through a Linux-only same-directory staging adapter.
+
+The Linux output adapter rejects symbolic-link and non-regular targets, requires explicit replacement, creates mode `0600` staging files, verifies parent and target identity, commits atomically, and cleans temporary or newly linked artifacts after failed no-clobber commits. The host must protect the parent directory and mount namespace from privileged concurrent replacement. A directory-sync failure can leave complete committed bytes whose durability is uncertain; partial staged bytes are never reported as success. Non-Linux persistent output fails closed as unsupported.
 
 ## Assumptions
 
-- The operating system, Rust runtime, and implemented SHA-256 primitive are not already compromised.
+- The operating system, Rust runtime, parser dependencies, and implemented SHA-256 primitive are not already compromised.
 - The caller can identify the intended local pack root.
 - Linux hosts supply a stable mount namespace for the duration of composition.
+- Output parent directories are protected from privileged concurrent replacement.
 - Inputs are explicit rather than read from mutable ambient state by inner layers.
 - Hosts do not treat structural validation as semantic approval.
 - Binary, schema, and pack acquisition trust is defined by the operator or host.
@@ -135,23 +140,23 @@ Status meanings:
 
 | ID | Threat or abuse case | Status | Current control or boundary | Owner / follow-up |
 | --- | --- | --- | --- | --- |
-| T01 | Invalid syntax, unknown v1 fields, or unsupported schema families create ambiguous interpretation. | Implemented | Strict DTOs, unknown-field rejection, schema preflight, JSON Schema, and fixtures. | `invokrum-schema`; regression CI. |
+| T01 | Invalid syntax, unknown v1 fields, or unsupported schema families create ambiguous interpretation. | Implemented | Strict DTOs, unknown-field rejection, bounded schema preflight, JSON Schema, and fixtures. | `invokrum-schema`; regression CI. |
 | T02 | Duplicate declarations or selected overlay IDs, dangling references, wrong-class selections, or invalid cardinality bypass structural policy. | Implemented | Validated domain values and aggregate construction reject these states. | `invokrum-core`; unit and integration tests. |
-| T03 | Nondeterministic declaration, collection, diagnostic, or filesystem ordering changes output. | Partial | Domain, schema, composition, canonical lock encoding, and drift ordering are deterministic and tested; CLI multi-diagnostic and persistent-output ordering remain. | Issue #6. |
+| T03 | Nondeterministic declaration, collection, diagnostic, or filesystem ordering changes output. | Implemented | Domain, schema, composition, canonical lock encoding, drift reports, CLI envelopes, and diagnostics use explicit deterministic ordering and are covered by layered tests. | Regression CI. |
 | T04 | Traversal, platform separators, symlinks, hard links, namespace aliases, mount points, reparse points, or races expose unintended bytes. | Partial | Portable lexical validation plus the Linux adapter reject symlinks, hard links, device crossings, root escapes, non-regular files, and changed opened-file identity. Non-Linux platforms fail closed. | Stable host namespace precondition; future platform adapters. |
 | T05 | A structurally valid overlay injects instructions or changes model or tool behavior. | Delegated | Invokrum preserves provenance and structure but does not classify prompt semantics. | Pack trust, host approvals, sandboxing, and capability policy. |
-| T06 | Mutable remote content or substitution changes composition without review. | Partial | Core, schema, composition, filesystem, and integrity adapters perform no network access; lock generation consumes exact local composition bytes. | Host acquisition and publisher-authentication policy. |
-| T07 | Secret variables leak through diagnostics, manifests, lockfiles, stdout, logs, or crashes. | Partial | The v1 lock operation accepts no variable values and has no value field; variable declarations are represented only through the pack digest. Interpolation and delivery-layer redaction remain. | Issues #6 and #20. |
+| T06 | Mutable remote content or substitution changes composition without review. | Partial | Core, schema, composition, filesystem, integrity, and CLI runtime paths perform no acquisition or implicit network access; lock generation consumes exact local composition bytes. | Host acquisition and publisher-authentication policy. |
+| T07 | Secret variables leak through diagnostics, manifests, lockfiles, stdout, logs, or crashes. | Partial | The v1 lock and CLI operations accept no variable values, expose no value field, and omit variable declarations from machine envelopes. Future interpolation still requires dedicated redaction and persistence rules. | Future interpolation design. |
 | T08 | Hash, canonicalization, manifest, or lockfile confusion represents one artifact as another. | Implemented | Versioned exact canonical JSON, separated SHA-256 digest domains, strict identity/digest validation, internal engine-input and manifest checks, and deterministic drift categories are executable contracts. | `invokrum-integrity`; integrity regression CI. |
-| T09 | Pathological nesting, collection size, file size, lock size, or output expansion causes denial of service. | Partial | Composition bounds selected overlays, source bytes, and normalized output; lock decoding bounds input to 1 MiB and 256 overlay records. Schema document bytes, nesting depth, and declaration counts remain. | Issue #20. |
+| T09 | Pathological nesting, collection size, file size, lock size, or output expansion causes denial of service. | Implemented | Schema input bytes, container depth, and declaration counts are bounded; composition bounds selected overlays, source bytes, and normalized output; lock decoding bounds input bytes and overlay records. Exact and over-limit behavior is tested. | Hosts must not raise injected limits beyond their resource budget. |
 | T10 | A host modifies rendered bytes but claims the original digest or verification. | Delegated | The output digest covers exact normalized bytes and verification reports output drift; a transforming host must create a new identity and bind it to invocation. | Host execution and evidence contract. |
 | T11 | A host bypasses validation, reinterprets ordering, or invokes a runtime with different inputs. | Delegated | Stable adapter boundaries and composition-root rules are documented. | Host conformance work in issues #7 and #12. |
 | T12 | Parser, dependency, build, release, or artifact compromise changes behavior. | Partial | Pinned Rust toolchain, Cargo lockfile, strict CI, maintained schema dependencies, and published SHA-256 test vectors are present. | Issue #8 for audits, action pinning, and release gates. |
-| T13 | Errors or source locations expose sensitive content or unstable parser internals. | Partial | Domain and integrity errors are typed, parser messages are bounded, source failures use stable categories, decoded lock identities use validated grammars, and application source diagnostics do not echo paths. | Issue #6 for complete delivery-layer redaction and escaping. |
+| T13 | Errors or source locations expose sensitive content or unstable parser internals. | Implemented | Errors use stable categories, parser messages and schema identities are bounded, source failures expose validated paths without raw content, and CLI diagnostics visibly encode controls. | Regression CI; revisit with interpolation. |
 | T14 | Self-referential, asymmetric, or inconsistent incompatibility rules produce surprising results. | Implemented | References are validated and every selected directional or self-incompatibility declaration is evaluated in deterministic composition order before source reads. | `invokrum-core`; composition regression tests. |
 | T15 | Duplicate JSON or YAML mapping keys, aliases, merge keys, tags, or multi-document input create parser-dependent meaning. | Implemented | Schema preflight rejects duplicate keys and unsupported YAML features; lock decoding rejects duplicate fields and requires exact canonical JSON bytes. | Schema and integrity adversarial regression tests. |
-| T16 | Attacker-controlled paths or parser messages inject control characters into terminals, logs, or machine-output boundaries. | Partial | Identifiers are restricted to ASCII, lock identities and source paths are revalidated, parser messages are bounded, and application source diagnostics do not echo structured paths. | Issue #6 for human presentation and machine-output separation. |
-| T17 | Output paths cause clobbering, symlink following, unsafe permissions, partial writes, or stale artifacts after failure. | Planned | The CLI and persistent output adapters are not implemented. | Issue #6; output adapter tests required. |
+| T16 | Attacker-controlled paths or parser messages inject control characters into terminals, logs, or machine-output boundaries. | Implemented | Identifiers are restricted, paths are validated, parser messages are bounded, human diagnostics visibly encode controls, and versioned JSON remains separate from stderr. | CLI and schema E2E regression tests. |
+| T17 | Output paths cause clobbering, symlink following, unsafe permissions, partial writes, or stale artifacts after failure. | Partial | The Linux output adapter enforces no-follow regular targets, explicit replacement, mode `0600`, same-directory staging, atomic commit, identity checks, and cleanup. | Protected parent and namespace precondition; future non-Linux adapters and durability handling. |
 
 ## Security invariants
 
@@ -190,7 +195,7 @@ A pack passes structural validation but contains instructions that manipulate a 
 
 ### Secret exfiltration through evidence
 
-A sensitive value is interpolated and copied into a diagnostic, manifest, lockfile, or log. The v1 lock API cannot accept or persist variable values and does not embed variable declarations. Future interpolation still requires a dedicated representation, redacted diagnostics, safe rendering, and default exclusion from persisted evidence.
+A sensitive value is interpolated and copied into a diagnostic, manifest, lockfile, or log. The v1 lock and CLI APIs cannot accept or persist variable values and do not embed variable declarations in machine output. Future interpolation still requires a dedicated representation, redacted diagnostics, safe rendering, and default exclusion from persisted evidence.
 
 ### Mutable-input race
 
@@ -206,11 +211,11 @@ An attacker replaces a lockfile and recomputes every unkeyed digest. Internal in
 
 ### Terminal or log injection
 
-A path or parser message contains newlines, terminal escapes, or delimiter-like text that forges diagnostics or corrupts downstream parsing. Application source failures expose stable categories and do not echo paths. Lock identities and sources are validated before use. Any delivery-layer path presentation must escape or visibly encode controls, while JSON and other machine formats must remain syntactically valid and separate from human stderr.
+A path or parser message contains newlines, terminal escapes, or delimiter-like text that forges diagnostics or corrupts downstream parsing. Application source failures expose stable categories and validated paths without raw source content. Schema parser text is bounded. Human CLI diagnostics visibly encode control characters, while versioned JSON output remains syntactically separate from stderr.
 
 ### Unsafe output replacement
 
-An output path points through a symlink, names an existing sensitive file, or receives a partial result before composition fails. The output adapter must use explicit overwrite and link policy, safe permissions, atomic replacement where supported, and cleanup that never presents an incomplete artifact as successful.
+An output path points through a symlink, names an existing sensitive file, or receives a partial result before composition fails. On Linux, the output adapter rejects links and non-regular targets, requires explicit replacement, stages privately in the destination directory, verifies identities, commits atomically, and cleans failed temporary or newly linked artifacts. The host must protect the parent and namespace. A post-commit directory-sync failure may leave complete bytes with uncertain durability, but partial staged bytes are never reported as success.
 
 ### Host attestation laundering
 
@@ -218,22 +223,22 @@ A host appends instructions after verification and records the original digest. 
 
 ### Resource exhaustion
 
-A pack uses deep nesting, large collections, oversized overlays, expansion-heavy variables, or oversized lock evidence. YAML aliases and block scalars are not accepted. Composition bounds selected overlay count, each source read, and normalized output growth. Lock decoding rejects more than 1 MiB or 256 overlay records before drift evaluation. Schema document byte, nesting, and declaration-count limits remain required.
+A pack uses deep nesting, large collections, oversized overlays, expansion-heavy future variables, or oversized lock evidence. The schema adapter rejects documents over 1 MiB by default before deserialization, limits container depth to 32, and bounds every v1 declaration category before domain construction. YAML aliases and block scalars are not accepted. Composition bounds selected overlay count, each source read, and normalized output growth. Lock decoding rejects more than 1 MiB or 256 overlay records before drift evaluation. Hosts injecting larger limits accept the corresponding memory and latency risk.
 
 ## Responsibility matrix
 
 | Responsibility | Invokrum core or adapters | Pack author or distributor | Host integration |
 | --- | --- | --- | --- |
-| Schema and structural validity | Enforce | Produce conforming documents | Reject failures |
+| Schema and structural validity | Enforce with bounded parsing | Produce conforming documents | Reject failures; choose safe limits |
 | Duplicate keys and accepted encodings | Schema and integrity adapters enforce | Avoid unsupported features and noncanonical lock encodings | Do not bypass decoding |
 | Deterministic ordering and compatibility | Enforce | Declare explicit intent | Do not reinterpret |
 | Local path containment | Linux adapter enforces documented policy | Use pack-relative paths | Select protected root and stable namespace; reject unsupported platforms |
 | Canonical lock integrity | Produce and verify versioned bounded evidence | Preserve exact canonical bytes | Authenticate storage/distribution when provenance matters |
 | Publisher authenticity | Not provided by unkeyed digests | Sign or publish through chosen process | Authenticate and pin source |
 | Prompt semantic safety | Not provided | Review and govern content | Apply approvals and capability policy |
-| Secret handling | V1 lock excludes variable values; future interpolation remains | Mark variables correctly | Supply values securely and protect outputs |
+| Secret handling | V1 lock and CLI exclude variable values; future interpolation remains | Mark variables correctly | Supply values securely and protect outputs |
 | Runtime authorization and sandboxing | Not provided | N/A | Enforce |
-| Output path and terminal safety | CLI and output adapters enforce when implemented | Avoid hostile names where possible | Select destinations and retain securely |
+| Output path and terminal safety | Linux CLI adapter enforces supported policy | Avoid hostile names where possible | Select protected destinations and retain securely |
 | Exact-byte execution binding | Produce input and output identity material | N/A | Bind digest to invocation bytes |
 | Audit retention and access control | Produce bounded evidence | N/A | Persist and protect evidence |
 
@@ -245,7 +250,7 @@ The threat-model checker validates document structure and status-table integrity
 
 ## Residual risk
 
-Residual risk includes malicious prompt semantics, compromised hosts or dependencies, unsafe model or tool behavior, stolen signing keys, unauthenticated lockfile replacement with recomputed unkeyed digests, operator error, privileged hostile mount namespaces, unsupported non-Linux filesystem semantics, and operating-system or filesystem vulnerabilities. Invokrum reduces ambiguity and improves evidence; it does not replace host security architecture.
+Residual risk includes malicious prompt semantics, compromised hosts or dependencies, parser implementation vulnerabilities or unexpectedly expensive inputs within configured limits, unsafe model or tool behavior, stolen signing keys, unauthenticated lockfile replacement with recomputed unkeyed digests, operator error, privileged hostile mount namespaces, unsafe host-selected limit increases, unsupported non-Linux filesystem semantics, uncertain durability after a post-commit directory-sync failure, and operating-system or filesystem vulnerabilities. Invokrum reduces ambiguity and improves evidence; it does not replace host security architecture.
 
 ## Vulnerability reporting
 
