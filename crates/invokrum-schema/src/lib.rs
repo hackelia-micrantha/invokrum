@@ -111,11 +111,11 @@ pub fn parse_json(input: &str) -> Result<OverlayPack, SchemaError> {
 /// the schema family is unsupported, duplicate set values are present, or domain
 /// invariants are violated.
 pub fn parse_yaml(input: &str) -> Result<OverlayPack, SchemaError> {
-    let envelope: SchemaEnvelope = serde_yaml::from_str(input)
+    let envelope: SchemaEnvelope = serde_yaml_ng::from_str(input)
         .map_err(|error| SchemaError::decode("yaml", error.to_string()))?;
     ensure_supported_schema(&envelope.schema)?;
 
-    let document: PackDocument = serde_yaml::from_str(input)
+    let document: PackDocument = serde_yaml_ng::from_str(input)
         .map_err(|error| SchemaError::decode("yaml", error.to_string()))?;
     document.try_into()
 }
