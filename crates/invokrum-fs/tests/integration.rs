@@ -69,6 +69,28 @@ fn file_size_limit_is_enforced_during_read() {
 }
 
 #[test]
+fn replacing_the_pack_root_is_rejected() {
+    let parent = TestDirectory::new();
+    let root = parent.path().join("pack");
+    let original = parent.path().join("original-pack");
+    fs::create_dir(&root).expect("pack root should be created");
+    fs::write(root.join("overlay.md"), b"trusted").expect("overlay should be written");
+    let source = LocalPackSource::open(&root).expect("root should be accepted");
+
+    fs::rename(&root, &original).expect("original root should be moved");
+    fs::create_dir(&root).expect("replacement root should be created");
+    fs::write(root.join("overlay.md"), b"replacement").expect("replacement should be written");
+
+    assert_eq!(
+        source.load(&path("overlay.md"), 32),
+        Err(failure(
+            "overlay.md",
+            SourceFailureKind::ChangedDuringRead
+        ))
+    );
+}
+
+#[test]
 fn symbolic_links_are_rejected_at_root_and_below_root() {
     let parent = TestDirectory::new();
     let real_root = parent.path().join("real");
