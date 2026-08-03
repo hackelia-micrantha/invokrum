@@ -32,19 +32,26 @@ jobs:
           fetch-depth: 0
       - name: Validate tag against workspace version
         run: python3 scripts/release.py validate-tag --tag "$GITHUB_REF_NAME"
-      - name: Require release commit on main
+      - name: Require exact immutable tag commit on main
         shell: bash
         run: |
           set -euo pipefail
+          tag_commit="$(git rev-list --max-count=1 "$GITHUB_REF_NAME")"
+          test "$tag_commit" = "$GITHUB_SHA"
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-      - name: Create or reset draft prerelease
+      - name: Create or reuse draft prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            is_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)"
+            if [ "$is_draft" != "true" ]; then
+              echo "release $GITHUB_REF_NAME is already published and will not be modified" >&2
+              exit 1
+            fi
             gh release edit "$GITHUB_REF_NAME" --draft --prerelease
           else
             gh release create "$GITHUB_REF_NAME" \
