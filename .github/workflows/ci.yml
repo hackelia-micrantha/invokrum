@@ -70,10 +70,10 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-      - name: Install pinned Rust toolchain
+      - name: Install pinned project Rust toolchain
         run: rustup show
-      - name: Install pinned cargo-deny
-        run: cargo install cargo-deny --version 0.18.3 --locked
+      - name: Install current cargo-deny with isolated stable toolchain
+        run: cargo +stable install cargo-deny --version 0.19.7 --locked
       - name: Audit advisories, licenses, bans, and sources
         run: cargo deny check advisories bans licenses sources
       - name: Install checksum-verified Gitleaks
