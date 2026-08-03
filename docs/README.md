@@ -9,6 +9,7 @@ Documentation distinguishes between **accepted design**, **planned interfaces**,
 - [Purpose and scope](purpose.md)
 - [Use cases](use-cases.md)
 - [Architecture](architecture/README.md)
+- [Threat model and trust boundaries](security/threat-model.md)
 - [V1 schema contract](schema-v1.md)
 - [Configuration model](configuration.md)
 - [Usage model](usage.md)
@@ -31,5 +32,7 @@ Documentation uses these terms deliberately:
 - **Planned** — intended for a future milestone but not yet available.
 - **Implemented** — present in the repository and covered by executable validation.
 - **Experimental** — implemented but not yet compatibility-stable.
+
+Security controls additionally use **Partial**, **Delegated**, and **Out of scope** as defined by the [threat model](security/threat-model.md).
 
 When documentation and implementation diverge, implementation and executable contracts are authoritative; the discrepancy should be reported as documentation drift.
