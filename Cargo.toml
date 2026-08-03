@@ -2,6 +2,7 @@
 members = [
   "crates/invokrum-core",
   "crates/invokrum-schema",
+  "crates/invokrum-fs",
   "crates/invokrum-cli",
 ]
 resolver = "2"
