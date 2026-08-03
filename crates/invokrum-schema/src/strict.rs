@@ -5,6 +5,7 @@ use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
 const DUPLICATE_MAPPING_KEY_MARKER: &str = "__invokrum_duplicate_mapping_key__";
+const MERGE_MAPPING_KEY_MARKER: &str = "__invokrum_merge_mapping_key__";
 const MAX_DECODE_MESSAGE_CHARS: usize = 512;
 
 /// A YAML feature excluded from the Invokrum v1 compatibility subset.
@@ -51,7 +52,7 @@ pub(crate) enum PreflightError {
 pub(crate) fn preflight_json(input: &str) -> Result<(), PreflightError> {
     serde_json::from_str::<StrictValue>(input)
         .map(|_| ())
-        .map_err(|error| classify_decode("json", error.to_string()))
+        .map_err(|error| classify_decode("json", &error.to_string()))
 }
 
 pub(crate) fn preflight_yaml(input: &str) -> Result<(), PreflightError> {
@@ -63,7 +64,8 @@ pub(crate) fn preflight_yaml(input: &str) -> Result<(), PreflightError> {
         message: "empty YAML document".to_owned(),
     })?;
 
-    StrictValue::deserialize(first).map_err(|error| classify_decode("yaml", error.to_string()))?;
+    StrictValue::deserialize(first)
+        .map_err(|error| classify_decode("yaml", &error.to_string()))?;
 
     if documents.next().is_some() {
         return Err(PreflightError::MultipleYamlDocuments);
@@ -72,13 +74,15 @@ pub(crate) fn preflight_yaml(input: &str) -> Result<(), PreflightError> {
     Ok(())
 }
 
-fn classify_decode(format: &'static str, message: String) -> PreflightError {
+fn classify_decode(format: &'static str, message: &str) -> PreflightError {
     if message.contains(DUPLICATE_MAPPING_KEY_MARKER) {
         PreflightError::DuplicateMappingKey { format }
+    } else if message.contains(MERGE_MAPPING_KEY_MARKER) {
+        PreflightError::UnsupportedYamlFeature(YamlFeature::MergeKey)
     } else {
         PreflightError::Decode {
             format,
-            message: bounded_message(&message),
+            message: bounded_message(message),
         }
     }
 }
@@ -305,6 +309,9 @@ impl<'de> Visitor<'de> for StrictValueVisitor {
     {
         let mut keys = BTreeSet::new();
         while let Some(key) = mapping.next_key::<String>()? {
+            if key == "<<" {
+                return Err(de::Error::custom(MERGE_MAPPING_KEY_MARKER));
+            }
             if !keys.insert(key) {
                 return Err(de::Error::custom(DUPLICATE_MAPPING_KEY_MARKER));
             }
