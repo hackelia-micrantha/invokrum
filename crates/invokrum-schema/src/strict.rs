@@ -85,8 +85,9 @@ fn classify_decode(format: &'static str, message: String) -> PreflightError {
 }
 
 fn bounded_message(message: &str) -> String {
-    let mut bounded: String = message.chars().take(MAX_DECODE_MESSAGE_CHARS).collect();
-    if message.chars().count() > MAX_DECODE_MESSAGE_CHARS {
+    let mut characters = message.chars();
+    let mut bounded: String = characters.by_ref().take(MAX_DECODE_MESSAGE_CHARS).collect();
+    if characters.next().is_some() {
         bounded.push('…');
     }
     bounded
@@ -232,19 +233,31 @@ impl<'de> Visitor<'de> for StrictValueVisitor {
         formatter.write_str("a scalar, sequence, or string-keyed mapping")
     }
 
-    fn visit_bool<E>(self, _value: bool) -> Result<Self::Value, E> {
+    fn visit_bool<E>(self, _value: bool) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
         Ok(StrictValue)
     }
 
-    fn visit_i64<E>(self, _value: i64) -> Result<Self::Value, E> {
+    fn visit_i64<E>(self, _value: i64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
         Ok(StrictValue)
     }
 
-    fn visit_u64<E>(self, _value: u64) -> Result<Self::Value, E> {
+    fn visit_u64<E>(self, _value: u64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
         Ok(StrictValue)
     }
 
-    fn visit_f64<E>(self, _value: f64) -> Result<Self::Value, E> {
+    fn visit_f64<E>(self, _value: f64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
         Ok(StrictValue)
     }
 
@@ -255,15 +268,24 @@ impl<'de> Visitor<'de> for StrictValueVisitor {
         Ok(StrictValue)
     }
 
-    fn visit_string<E>(self, _value: String) -> Result<Self::Value, E> {
+    fn visit_string<E>(self, _value: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
         Ok(StrictValue)
     }
 
-    fn visit_none<E>(self) -> Result<Self::Value, E> {
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
         Ok(StrictValue)
     }
 
-    fn visit_unit<E>(self) -> Result<Self::Value, E> {
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
         Ok(StrictValue)
     }
 
