@@ -7,26 +7,15 @@
 #![forbid(unsafe_code)]
 
 pub mod model;
-pub mod schema;
 
 pub use model::{
     Cardinality, DomainError, Identifier, Overlay, OverlayClass, OverlayPack, PackRelativePath,
     Profile, Sensitivity, Variable,
 };
-pub use schema::{SchemaError, parse_json, parse_yaml, to_normalized_json};
-
-/// Current public schema family understood by the initial architecture.
-pub const SCHEMA_FAMILY: &str = "invokrum.dev/v1";
 
 #[cfg(test)]
 mod tests {
-    use super::{Cardinality, DomainError, Identifier, PackRelativePath, SCHEMA_FAMILY};
-
-    #[test]
-    fn schema_family_is_stable_and_versioned() {
-        assert_eq!(SCHEMA_FAMILY, "invokrum.dev/v1");
-        assert!(SCHEMA_FAMILY.ends_with("/v1"));
-    }
+    use super::{Cardinality, DomainError, Identifier, PackRelativePath};
 
     #[test]
     fn identifiers_reject_empty_and_structural_characters() {
@@ -47,9 +36,21 @@ mod tests {
     }
 
     #[test]
-    fn pack_paths_reject_absolute_and_parent_segments() {
-        assert!(PackRelativePath::parse("/etc/passwd").is_err());
-        assert!(PackRelativePath::parse("overlays/../secret.md").is_err());
+    fn pack_paths_use_a_portable_forward_slash_grammar() {
+        for invalid in [
+            "/etc/passwd",
+            "C:/secret.txt",
+            "overlays\\core.md",
+            "overlays/../secret.md",
+            "./core.md",
+            "overlays//core.md",
+            "overlays/",
+        ] {
+            assert!(
+                PackRelativePath::parse(invalid).is_err(),
+                "path should be rejected: {invalid}"
+            );
+        }
         assert_eq!(
             PackRelativePath::parse("overlays/core.md")
                 .expect("path should be valid")
