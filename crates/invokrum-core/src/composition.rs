@@ -84,6 +84,24 @@ pub enum SourceFailureKind {
     Io,
 }
 
+impl fmt::Display for SourceFailureKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::NotFound => "not found",
+            Self::NotRegularFile => "not a regular file",
+            Self::SymbolicLink => "symbolic link rejected",
+            Self::HardLink => "hard link rejected",
+            Self::MountBoundary => "filesystem boundary rejected",
+            Self::RootEscape => "pack-root escape rejected",
+            Self::ChangedDuringRead => "source changed during read",
+            Self::TooLarge => "source exceeds configured size limit",
+            Self::PermissionDenied => "permission denied",
+            Self::UnsupportedPlatform => "unsupported platform",
+            Self::Io => "I/O failure",
+        })
+    }
+}
+
 /// A source-adapter failure tied to a validated pack-relative path.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceFailure {
@@ -167,6 +185,7 @@ impl Composition {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CompositionError {
     UnknownProfile(Identifier),
+    MissingOverlay(Identifier),
     TooManyOverlays {
         count: usize,
         maximum: usize,
@@ -191,6 +210,9 @@ impl fmt::Display for CompositionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownProfile(profile) => write!(formatter, "unknown profile `{profile}`"),
+            Self::MissingOverlay(overlay) => {
+                write!(formatter, "validated profile references missing overlay `{overlay}`")
+            }
             Self::TooManyOverlays { count, maximum } => {
                 write!(formatter, "selected {count} overlays; maximum is {maximum}")
             }
@@ -208,12 +230,7 @@ impl fmt::Display for CompositionError {
             Self::OutputTooLarge { size, maximum } => {
                 write!(formatter, "normalized output requires {size} bytes; maximum is {maximum}")
             }
-            Self::Source(failure) => write!(
-                formatter,
-                "source `{}` was rejected: {:?}",
-                failure.path.as_str(),
-                failure.kind
-            ),
+            Self::Source(failure) => write!(formatter, "overlay source was rejected: {}", failure.kind),
         }
     }
 }
@@ -230,8 +247,8 @@ impl std::error::Error for CompositionError {}
 /// # Errors
 ///
 /// Returns [`CompositionError`] when the profile is unknown, selected overlays
-/// conflict, a configured limit is exceeded, or the source adapter rejects an
-/// input.
+/// conflict, a configured limit is exceeded, the validated aggregate is
+/// inconsistent, or the source adapter rejects an input.
 pub fn compose(
     pack: &OverlayPack,
     profile_id: &Identifier,
@@ -252,7 +269,7 @@ pub fn compose(
                     .overlays()
                     .iter()
                     .find(|overlay| &overlay.id == overlay_id)
-                    .expect("validated profile references must resolve");
+                    .ok_or_else(|| CompositionError::MissingOverlay(overlay_id.clone()))?;
                 selected.push(overlay);
             }
         }
@@ -299,7 +316,7 @@ pub fn compose(
                 size: usize::MAX,
                 maximum: limits.maximum_output_bytes,
             })?;
-        let separator_bytes = usize::from(!normalized_context.is_empty()) * 2;
+        let separator_bytes = usize::from(!entries.is_empty()) * 2;
         let required = normalized_context
             .len()
             .checked_add(separator_bytes)
