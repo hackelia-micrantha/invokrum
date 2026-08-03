@@ -97,10 +97,7 @@ fn pack_rejects_duplicate_declarations() {
 
 #[test]
 fn pack_rejects_profile_selection_from_the_wrong_class() {
-    let classes = vec![
-        class("core", 10, 0, None),
-        class("mode", 20, 0, None),
-    ];
+    let classes = vec![class("core", 10, 0, None), class("mode", 20, 0, None)];
     let overlays = vec![overlay("read-only", "mode")];
     let profile = Profile {
         id: id("invalid"),
@@ -148,10 +145,7 @@ fn pack_rejects_profile_that_omits_a_required_class() {
 fn pack_rejects_profile_above_maximum_cardinality() {
     let profile = Profile {
         id: id("invalid"),
-        selections: BTreeMap::from([(
-            id("mode"),
-            vec![id("read-only"), id("write-enabled")],
-        )]),
+        selections: BTreeMap::from([(id("mode"), vec![id("read-only"), id("write-enabled")])]),
     };
 
     let result = OverlayPack::new(
@@ -176,10 +170,7 @@ fn pack_rejects_profile_above_maximum_cardinality() {
 fn pack_rejects_duplicate_profile_selection() {
     let profile = Profile {
         id: id("invalid"),
-        selections: BTreeMap::from([(
-            id("mode"),
-            vec![id("read-only"), id("read-only")],
-        )]),
+        selections: BTreeMap::from([(id("mode"), vec![id("read-only"), id("read-only")])]),
     };
 
     let result = OverlayPack::new(
