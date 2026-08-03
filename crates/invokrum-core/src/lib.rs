@@ -7,11 +7,13 @@
 #![forbid(unsafe_code)]
 
 pub mod model;
+pub mod schema;
 
 pub use model::{
     Cardinality, DomainError, Identifier, Overlay, OverlayClass, OverlayPack, PackRelativePath,
     Profile, Sensitivity, Variable,
 };
+pub use schema::{SchemaError, parse_json, parse_yaml, to_normalized_json};
 
 /// Current public schema family understood by the initial architecture.
 pub const SCHEMA_FAMILY: &str = "invokrum.dev/v1";
