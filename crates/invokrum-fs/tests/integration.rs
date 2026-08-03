@@ -80,10 +80,10 @@ fn symbolic_links_are_rejected_at_root_and_below_root() {
 
     let linked_root = parent.path().join("linked-root");
     symlink(&real_root, &linked_root).expect("root symlink should be created");
-    assert_eq!(
+    assert!(matches!(
         LocalPackSource::open(&linked_root),
         Err(LocalPackSourceError::RootSymbolicLink)
-    );
+    ));
 
     let linked_file = real_root.join("linked.md");
     symlink(real_root.join("target.md"), &linked_file).expect("file symlink should be created");
