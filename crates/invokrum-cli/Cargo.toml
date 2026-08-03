@@ -12,6 +12,10 @@ path = "src/main.rs"
 
 [dependencies]
 invokrum-core = { path = "../invokrum-core" }
+invokrum-fs = { path = "../invokrum-fs" }
+invokrum-integrity = { path = "../invokrum-integrity" }
+invokrum-schema = { path = "../invokrum-schema" }
+serde_json = "1"
 
 [lints]
 workspace = true
