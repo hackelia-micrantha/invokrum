@@ -43,6 +43,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "invokrum-integrity"
+version = "0.1.0"
+dependencies = [
+ "invokrum-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "invokrum-schema"
 version = "0.1.0"
 dependencies = [
