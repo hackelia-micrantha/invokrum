@@ -10,12 +10,12 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-2f7d65.svg"></a>
-  <img alt="Project status: integrity baseline" src="https://img.shields.io/badge/status-integrity%20baseline-355f7d.svg">
+  <img alt="Project status: CLI baseline" src="https://img.shields.io/badge/status-CLI%20baseline-355f7d.svg">
   <img alt="Implementation language: Rust" src="https://img.shields.io/badge/language-Rust-b7410e.svg">
 </p>
 
 > [!IMPORTANT]
-> Invokrum has an implemented domain model, strict v1 YAML/JSON schema adapter, deterministic composition use case, fail-closed Linux filesystem adapter, and canonical lockfile verification adapter. CLI composition roots, atomic output persistence, publisher authentication, and runtime integrations are not yet complete.
+> Invokrum has an implemented domain model, bounded strict v1 YAML/JSON schema adapter, deterministic composition use case, fail-closed Linux filesystem adapter, canonical lockfile verification adapter, operator CLI, and Linux safe-output adapter. Publisher authentication, non-Linux filesystem/output adapters, release artifacts, and runtime integrations are not yet complete.
 
 ## What is Invokrum?
 
@@ -44,6 +44,7 @@ The goal is not another prompt-template manager. Invokrum is intended to provide
 - [V1 schema contract](docs/schema-v1.md)
 - [Configuration](docs/configuration.md)
 - [Usage](docs/usage.md)
+- [Governed code-review example](examples/governed-code-review/README.md)
 - [Development](docs/development.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
@@ -106,10 +107,10 @@ The mechanism-versus-policy boundary is documented in [ADR-0001](docs/architectu
 The workspace uses durable boundaries rather than placing serialization, hashing, or filesystem access inside application policy:
 
 - `invokrum-core` owns parsing-neutral domain types, the source port, deterministic resolution, compatibility evaluation, limits, ordered segments, and the in-memory-testable composition use case;
-- `invokrum-schema` translates strict YAML/JSON documents into the domain model;
+- `invokrum-schema` translates bounded strict YAML/JSON documents into the domain model;
 - `invokrum-fs` implements the source port with a fail-closed Linux local-filesystem policy;
 - `invokrum-integrity` consumes exact composition bytes and produces canonical SHA-256 lock material and drift reports;
-- `invokrum-cli` owns delivery concerns and will wire concrete adapters.
+- `invokrum-cli` owns arguments, diagnostics, exit codes, machine envelopes, safe output, and concrete adapter wiring.
 
 ## V1 pack format
 
@@ -160,18 +161,22 @@ The implemented integrity adapter defines:
 
 The manifest digest detects corruption; it is not a publisher signature. See [docs/integrity-and-lockfiles.md](docs/integrity-and-lockfiles.md).
 
-## Proposed CLI workflow
+## CLI workflow
 
-The intended CLI surface remains under implementation:
+The implemented offline CLI surface is:
 
 ```bash
 invokrum validate --pack ./pack.yaml --profile secure-review
 invokrum compose  --pack ./pack.yaml --profile secure-review
 invokrum inspect  --pack ./pack.yaml --profile secure-review --format json
 invokrum lock     --pack ./pack.yaml --profile secure-review
-invokrum verify   --lock ./invokrum.lock
+invokrum verify   --lock ./invokrum.lock --pack ./pack.yaml --profile secure-review
 invokrum diff     ./baseline.lock ./candidate.lock
 ```
+
+Raw context and canonical lock bytes use stdout without diagnostic text. Human and versioned `invokrum.cli/v1` JSON results use stdout; failures use stderr and stable exit categories. Linux persistent output uses explicit replacement, private permissions, same-directory staging, link rejection, identity checks, atomic commit, and failure cleanup.
+
+The [governed code-review walkthrough](examples/governed-code-review/README.md) reproduces exact context, inspect, and lock artifacts from a clean checkout and demonstrates an incompatible profile that fails before source reads.
 
 ## Relationship to Anthesis
 
@@ -197,7 +202,7 @@ Prompt overlays are configuration and potentially untrusted content. Invokrum as
 
 The accepted [threat model and trust boundaries](docs/security/threat-model.md) identify assets, actors, abuse cases, delegated host responsibilities, and the current status of each control. Only controls marked **Implemented** and backed by executable validation should be treated as present. Controls marked **Partial** or **Planned** are not production guarantees.
 
-The local filesystem contract currently supports Linux only and requires a stable host mount namespace. See [deterministic composition and filesystem contract](docs/composition-and-filesystem.md).
+The local filesystem and persistent-output contracts currently support Linux only and require a stable host mount namespace and protected output parent. See [deterministic composition and filesystem contract](docs/composition-and-filesystem.md) and the [usage contract](docs/usage.md).
 
 See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
