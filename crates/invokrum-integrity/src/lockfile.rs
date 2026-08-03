@@ -158,7 +158,7 @@ impl fmt::Display for IntegrityError {
 
 impl std::error::Error for IntegrityError {}
 
-/// Builds deterministic v1 lock material from a validated pack and composition.
+/// Builds deterministic, encodable v1 lock material from a validated pack and composition.
 ///
 /// Secret variable values cannot be persisted because this operation accepts no
 /// variable-value input and the format contains only structural identities and
@@ -167,12 +167,19 @@ impl std::error::Error for IntegrityError {}
 /// # Errors
 ///
 /// Returns [`IntegrityError`] when the composition is inconsistent with the pack,
-/// the profile cannot be found, or canonical serialization fails.
+/// the profile cannot be found, the injected digester is not v1 SHA-256, a v1
+/// resource limit is exceeded, or canonical serialization fails.
 pub fn build_lockfile(
     pack: &OverlayPack,
     composition: &Composition,
     digester: &impl Digester,
 ) -> Result<Lockfile, IntegrityError> {
+    if digester.algorithm() != SHA256_ALGORITHM {
+        return Err(IntegrityError::UnsupportedDigestAlgorithm);
+    }
+    if composition.segments().len() > MAX_LOCKED_OVERLAYS {
+        return Err(IntegrityError::TooManyOverlays);
+    }
     ensure_composition_matches(pack, composition)?;
     let profile = pack
         .profiles()
@@ -222,14 +229,17 @@ pub fn build_lockfile(
         digester,
         &canonical_json(&manifest).map_err(|_| IntegrityError::Encode)?,
     );
-
-    Ok(Lockfile {
+    let lockfile = Lockfile {
         format: LOCKFILE_FORMAT.to_owned(),
         canonicalization: CANONICALIZATION_FORMAT.to_owned(),
         digest_algorithm: digester.algorithm().to_owned(),
         manifest,
         manifest_digest,
-    })
+    };
+
+    validate_lockfile(&lockfile, digester)?;
+    ensure_encoded_size(&lockfile)?;
+    Ok(lockfile)
 }
 
 /// Encodes a validated lockfile as compact canonical UTF-8 JSON bytes.
@@ -340,6 +350,15 @@ fn ensure_composition_matches(
         return Err(IntegrityError::InconsistentComposition);
     }
     Ok(())
+}
+
+fn ensure_encoded_size(lockfile: &Lockfile) -> Result<(), IntegrityError> {
+    let bytes = canonical_json(lockfile).map_err(|_| IntegrityError::Encode)?;
+    if bytes.len() > MAX_LOCKFILE_BYTES {
+        Err(IntegrityError::LockfileTooLarge)
+    } else {
+        Ok(())
+    }
 }
 
 fn validate_lockfile(lockfile: &Lockfile, digester: &impl Digester) -> Result<(), IntegrityError> {
