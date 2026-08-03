@@ -21,9 +21,8 @@ use strict::{PreflightError, preflight_json, preflight_yaml};
 
 pub use limits::{
     DEFAULT_MAX_CLASSES, DEFAULT_MAX_DOCUMENT_BYTES, DEFAULT_MAX_INCOMPATIBILITIES,
-    DEFAULT_MAX_NESTING_DEPTH, DEFAULT_MAX_OVERLAYS, DEFAULT_MAX_PROFILES,
-    DEFAULT_MAX_SELECTIONS, DEFAULT_MAX_VARIABLES, DeclarationKind, DeclarationLimits,
-    SchemaLimits,
+    DEFAULT_MAX_NESTING_DEPTH, DEFAULT_MAX_OVERLAYS, DEFAULT_MAX_PROFILES, DEFAULT_MAX_SELECTIONS,
+    DEFAULT_MAX_VARIABLES, DeclarationKind, DeclarationLimits, SchemaLimits,
 };
 pub use strict::YamlFeature;
 
@@ -264,11 +263,13 @@ fn ensure_accumulated_count(
     let maximum = limits.maximum(kind);
     let mut actual = 0usize;
     for count in counts {
-        actual = actual.checked_add(count).ok_or(SchemaError::TooManyDeclarations {
-            kind,
-            maximum,
-            actual: usize::MAX,
-        })?;
+        actual = actual
+            .checked_add(count)
+            .ok_or(SchemaError::TooManyDeclarations {
+                kind,
+                maximum,
+                actual: usize::MAX,
+            })?;
         if actual > maximum {
             return Err(SchemaError::TooManyDeclarations {
                 kind,
