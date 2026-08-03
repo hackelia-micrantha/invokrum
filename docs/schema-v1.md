@@ -97,7 +97,9 @@ Equivalent documents normalize independently of incidental declaration order:
 
 ## Compatibility
 
-The v1 reader fails closed on any other schema family. Additive fields are not accepted until a reader version explicitly supports them. Breaking semantic, structural, YAML-subset, normalization, or default-limit changes require explicit compatibility review. A change that alters accepted v1 documents or their normalized meaning requires a new schema family.
+The v1 reader fails closed on any other schema family. Additive fields are not accepted until a reader version explicitly supports them. Breaking semantic, structural, YAML-subset, or normalization changes require a new schema family.
+
+Resource limits are reader and host policy rather than pack semantics. Tightening a default may reject a previously processable but still structurally valid document without changing the meaning of `invokrum.dev/v1`; such changes require explicit release notes, compatibility review, and boundary tests, but not a new schema family. Integrations that require a stable operational envelope should pass an explicit `SchemaLimits` value instead of relying on future defaults.
 
 ## Validation layers
 
