@@ -6,8 +6,13 @@
 
 #![forbid(unsafe_code)]
 
+pub mod composition;
 pub mod model;
 
+pub use composition::{
+    Composition, CompositionError, CompositionLimits, OverlaySource, ResolvedEntry,
+    ResolvedManifest, ResolvedSegment, SourceFailure, SourceFailureKind, compose,
+};
 pub use model::{
     Cardinality, DomainError, Identifier, Overlay, OverlayClass, OverlayPack, PackRelativePath,
     Profile, Sensitivity, Variable,
