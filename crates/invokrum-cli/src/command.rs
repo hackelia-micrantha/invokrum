@@ -1,13 +1,14 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str;
 
 use invokrum_core::{
-    Composition, CompositionLimits, Identifier, OverlayPack, OverlaySource, PackRelativePath, compose,
+    Composition, CompositionError, CompositionLimits, Identifier, OverlayPack, OverlaySource,
+    PackRelativePath, compose,
 };
 use invokrum_fs::LocalPackSource;
 use invokrum_integrity::{
-    DriftKind, IntegrityError, Lockfile, MAX_LOCKFILE_BYTES, Sha256Digester, build_lockfile,
-    decode_lockfile, encode_lockfile, verify,
+    DriftKind, Lockfile, MAX_LOCKFILE_BYTES, Sha256Digester, build_lockfile, decode_lockfile,
+    encode_lockfile, verify,
 };
 use serde_json::{Value, json};
 
@@ -66,18 +67,14 @@ fn validate(
             let profile = profile
                 .as_ref()
                 .map_or_else(|| "all".to_owned(), ToString::to_string);
-            format!(
-                "valid pack={} profile={}\n",
-                loaded.pack.id, profile
-            )
-            .into_bytes()
+            format!("valid pack={} profile={}\n", loaded.pack.id, profile).into_bytes()
         }
         OutputFormat::Json => json_line(json!({
             "command": "validate",
             "ok": true,
             "pack": loaded.pack.id.to_string(),
             "profile": profile.map(|value| value.to_string()),
-            "schema": loaded.pack.schema_family,
+            "schema": loaded.pack.schema_family.as_str(),
         }))?,
     };
     Ok(Execution::success(stdout))
@@ -215,7 +212,7 @@ fn compose_selection(selection: &PackSelection) -> Result<CurrentComposition, Cl
         &loaded.source,
         CompositionLimits::default(),
     )
-    .map_err(CliError::composition)?;
+    .map_err(composition_error)?;
     Ok(CurrentComposition {
         pack: loaded.pack,
         composition,
@@ -223,7 +220,7 @@ fn compose_selection(selection: &PackSelection) -> Result<CurrentComposition, Cl
 }
 
 fn load_pack(path: &Path) -> Result<LoadedPack, CliError> {
-    let (source, relative, bytes) = read_local(path, MAX_PACK_BYTES)?;
+    let (source, bytes) = read_local(path, MAX_PACK_BYTES)?;
     let text = str::from_utf8(&bytes)
         .map_err(|_| CliError::input("pack document must be valid UTF-8"))?;
     let extension = path
@@ -239,19 +236,15 @@ fn load_pack(path: &Path) -> Result<LoadedPack, CliError> {
     }
     .map_err(CliError::validation)?;
 
-    debug_assert_eq!(relative.as_str(), path.file_name().and_then(|name| name.to_str()).unwrap());
     Ok(LoadedPack { pack, source })
 }
 
 fn load_lock(path: &Path) -> Result<Lockfile, CliError> {
-    let (_, _, bytes) = read_local(path, MAX_LOCKFILE_BYTES)?;
+    let (_, bytes) = read_local(path, MAX_LOCKFILE_BYTES)?;
     decode_lockfile(&bytes).map_err(CliError::integrity)
 }
 
-fn read_local(
-    path: &Path,
-    maximum_bytes: usize,
-) -> Result<(LocalPackSource, PackRelativePath, Vec<u8>), CliError> {
+fn read_local(path: &Path, maximum_bytes: usize) -> Result<(LocalPackSource, Vec<u8>), CliError> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let file_name = path
         .file_name()
@@ -260,10 +253,25 @@ fn read_local(
     let relative = PackRelativePath::parse(file_name.to_owned())
         .map_err(|_| CliError::input("input file name violates the portable path policy"))?;
     let source = LocalPackSource::open(parent).map_err(CliError::input)?;
-    let bytes = source
-        .load(&relative, maximum_bytes)
-        .map_err(CliError::input)?;
-    Ok((source, relative, bytes))
+    let bytes = source.load(&relative, maximum_bytes).map_err(|error| {
+        CliError::input(format!(
+            "input `{}` was rejected: {}",
+            error.path.as_str(),
+            error.kind
+        ))
+    })?;
+    Ok((source, bytes))
+}
+
+fn composition_error(error: CompositionError) -> CliError {
+    match error {
+        CompositionError::Source(failure) => CliError::composition(format!(
+            "overlay source `{}` was rejected: {}",
+            failure.path.as_str(),
+            failure.kind
+        )),
+        other => CliError::composition(other),
+    }
 }
 
 fn parse_profile(value: &str) -> Result<Identifier, CliError> {
@@ -312,7 +320,7 @@ fn inspect_json(composition: &Composition) -> Result<Vec<u8>, CliError> {
         "output_bytes": manifest.output_bytes,
         "pack": manifest.pack.to_string(),
         "profile": manifest.profile.to_string(),
-        "schema": manifest.schema_family,
+        "schema": manifest.schema_family.as_str(),
         "source_bytes": manifest.source_bytes,
     }))
 }
@@ -419,12 +427,3 @@ fn same_overlay_set(baseline: &Lockfile, candidate: &Lockfile) -> bool {
                 left.class == right.class && left.id == right.id && left.source == right.source
             })
 }
-
-impl From<IntegrityError> for CliError {
-    fn from(error: IntegrityError) -> Self {
-        Self::integrity(error)
-    }
-}
-
-#[allow(dead_code)]
-fn _assert_paths_are_owned(_path: PathBuf) {}
