@@ -14,16 +14,26 @@
     "variables": { "type": "array", "default": [], "items": { "$ref": "#/$defs/variable" } }
   },
   "$defs": {
-    "identifier": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$" },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "portablePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*//)(?!\\.{1,2}(?:/|$))(?!.*\\/\\.{1,2}(?:/|$))(?!.*\\/$).+$"
+    },
     "class": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "order", "minimum", "maximum"],
+      "required": ["id", "order", "minimum"],
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },
-        "order": { "type": "integer", "minimum": 0 },
-        "minimum": { "type": "integer", "minimum": 0 },
-        "maximum": { "type": ["integer", "null"], "minimum": 0 }
+        "order": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "minimum": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "maximum": { "type": ["integer", "null"], "minimum": 0, "maximum": 4294967295 }
       }
     },
     "overlay": {
@@ -33,8 +43,13 @@
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },
         "class": { "$ref": "#/$defs/identifier" },
-        "source": { "type": "string", "minLength": 1 },
-        "incompatible_with": { "type": "array", "uniqueItems": true, "default": [], "items": { "$ref": "#/$defs/identifier" } }
+        "source": { "$ref": "#/$defs/portablePath" },
+        "incompatible_with": {
+          "type": "array",
+          "uniqueItems": true,
+          "default": [],
+          "items": { "$ref": "#/$defs/identifier" }
+        }
       }
     },
     "profile": {
@@ -45,7 +60,12 @@
         "id": { "$ref": "#/$defs/identifier" },
         "selections": {
           "type": "object",
-          "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/identifier" } }
+          "propertyNames": { "$ref": "#/$defs/identifier" },
+          "additionalProperties": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/identifier" }
+          }
         }
       }
     },
