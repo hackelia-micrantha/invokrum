@@ -129,8 +129,26 @@ fn composition_is_byte_identical_and_structurally_ordered() {
             ("mode", "guarded")
         ]
     );
-    assert_eq!(first.manifest().source_bytes, 25);
-    assert_eq!(first.manifest().output_bytes, 29);
+    assert_eq!(first.manifest().source_bytes, 20);
+    assert_eq!(first.manifest().output_bytes, 24);
+}
+
+#[test]
+fn empty_segments_remain_structurally_distinct_in_normalized_output() {
+    let source = MemorySource::default()
+        .with("overlays/core-default.md", b"")
+        .with("overlays/read-only.md", b"read-only")
+        .with("overlays/guarded.md", b"guarded");
+    let result = compose(
+        &pack(false),
+        &id("review"),
+        &source,
+        CompositionLimits::default(),
+    )
+    .expect("composition should succeed");
+
+    assert_eq!(result.normalized_context(), b"\n\nread-only\n\nguarded");
+    assert_eq!(result.segments().len(), 3);
 }
 
 #[test]
@@ -197,6 +215,15 @@ fn source_failure_categories_are_preserved() {
             SourceFailureKind::NotFound,
         )))
     );
+}
+
+#[test]
+fn source_diagnostics_do_not_echo_attacker_controlled_paths() {
+    let error = CompositionError::Source(SourceFailure::new(
+        path("overlays/control\nsequence.md"),
+        SourceFailureKind::NotFound,
+    ));
+    assert_eq!(error.to_string(), "overlay source was rejected: not found");
 }
 
 #[test]
