@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{Identifier, Overlay, OverlayPack, PackRelativePath};
+use crate::{Identifier, Overlay, OverlayPack, PackRelativePath, Profile};
 
 /// Explicit resource limits applied during composition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -271,20 +271,7 @@ pub fn compose(
         .iter()
         .find(|profile| &profile.id == profile_id)
         .ok_or_else(|| CompositionError::UnknownProfile(profile_id.clone()))?;
-
-    let mut selected: Vec<&Overlay> = Vec::new();
-    for class in pack.classes() {
-        if let Some(overlay_ids) = profile.selections.get(&class.id) {
-            for overlay_id in overlay_ids {
-                let overlay = pack
-                    .overlays()
-                    .iter()
-                    .find(|overlay| &overlay.id == overlay_id)
-                    .ok_or_else(|| CompositionError::MissingOverlay(overlay_id.clone()))?;
-                selected.push(overlay);
-            }
-        }
-    }
+    let selected = resolve_selected(pack, profile)?;
 
     if selected.len() > limits.maximum_overlays {
         return Err(CompositionError::TooManyOverlays {
@@ -293,8 +280,34 @@ pub fn compose(
         });
     }
 
-    for overlay in &selected {
-        for other in &selected {
+    reject_incompatibilities(&selected)?;
+    assemble(pack, profile, selected, source, limits)
+}
+
+fn resolve_selected<'a>(
+    pack: &'a OverlayPack,
+    profile: &Profile,
+) -> Result<Vec<&'a Overlay>, CompositionError> {
+    let mut selected = Vec::new();
+    for class in pack.classes() {
+        if let Some(overlay_ids) = profile.selections.get(&class.id) {
+            for overlay_id in overlay_ids {
+                let overlay = pack
+                    .overlays()
+                    .binary_search_by(|candidate| candidate.id.cmp(overlay_id))
+                    .ok()
+                    .map(|index| &pack.overlays()[index])
+                    .ok_or_else(|| CompositionError::MissingOverlay(overlay_id.clone()))?;
+                selected.push(overlay);
+            }
+        }
+    }
+    Ok(selected)
+}
+
+fn reject_incompatibilities(selected: &[&Overlay]) -> Result<(), CompositionError> {
+    for overlay in selected {
+        for other in selected {
             if overlay.incompatible_with.contains(&other.id) {
                 return Err(CompositionError::IncompatibleOverlays {
                     overlay: overlay.id.clone(),
@@ -303,78 +316,105 @@ pub fn compose(
             }
         }
     }
+    Ok(())
+}
 
+fn load_segment(
+    overlay: &Overlay,
+    source: &impl OverlaySource,
+    maximum_bytes: usize,
+) -> Result<ResolvedSegment, CompositionError> {
+    let bytes = source
+        .load(&overlay.source, maximum_bytes)
+        .map_err(CompositionError::Source)?;
+    if bytes.len() > maximum_bytes {
+        return Err(CompositionError::OverlayTooLarge {
+            overlay: overlay.id.clone(),
+            size: bytes.len(),
+            maximum: maximum_bytes,
+        });
+    }
+    Ok(ResolvedSegment {
+        class: overlay.class.clone(),
+        overlay: overlay.id.clone(),
+        source: overlay.source.clone(),
+        bytes,
+    })
+}
+
+fn assemble(
+    pack: &OverlayPack,
+    profile: &Profile,
+    selected: Vec<&Overlay>,
+    source: &impl OverlaySource,
+    limits: CompositionLimits,
+) -> Result<Composition, CompositionError> {
     let mut entries = Vec::with_capacity(selected.len());
     let mut segments = Vec::with_capacity(selected.len());
     let mut normalized_context = Vec::new();
     let mut source_bytes = 0_usize;
 
     for overlay in selected {
-        let bytes = source
-            .load(&overlay.source, limits.maximum_overlay_bytes)
-            .map_err(CompositionError::Source)?;
-        if bytes.len() > limits.maximum_overlay_bytes {
-            return Err(CompositionError::OverlayTooLarge {
-                overlay: overlay.id.clone(),
-                size: bytes.len(),
-                maximum: limits.maximum_overlay_bytes,
-            });
-        }
-
-        source_bytes =
-            source_bytes
-                .checked_add(bytes.len())
-                .ok_or(CompositionError::OutputTooLarge {
-                    size: usize::MAX,
-                    maximum: limits.maximum_output_bytes,
-                })?;
+        let segment = load_segment(overlay, source, limits.maximum_overlay_bytes)?;
+        source_bytes = checked_output_size(
+            source_bytes,
+            segment.bytes.len(),
+            limits.maximum_output_bytes,
+        )?;
         let separator_bytes = usize::from(!entries.is_empty()) * 2;
-        let required = normalized_context
-            .len()
-            .checked_add(separator_bytes)
-            .and_then(|size| size.checked_add(bytes.len()))
-            .ok_or(CompositionError::OutputTooLarge {
-                size: usize::MAX,
-                maximum: limits.maximum_output_bytes,
-            })?;
-        if required > limits.maximum_output_bytes {
-            return Err(CompositionError::OutputTooLarge {
-                size: required,
-                maximum: limits.maximum_output_bytes,
-            });
-        }
+        let framed_bytes = checked_output_size(
+            separator_bytes,
+            segment.bytes.len(),
+            limits.maximum_output_bytes,
+        )?;
+        let required = checked_output_size(
+            normalized_context.len(),
+            framed_bytes,
+            limits.maximum_output_bytes,
+        )?;
 
         if separator_bytes != 0 {
             normalized_context.extend_from_slice(b"\n\n");
         }
-        normalized_context.extend_from_slice(&bytes);
-
+        normalized_context.extend_from_slice(&segment.bytes);
         entries.push(ResolvedEntry {
-            class: overlay.class.clone(),
-            overlay: overlay.id.clone(),
-            source: overlay.source.clone(),
-            byte_length: bytes.len(),
+            class: segment.class.clone(),
+            overlay: segment.overlay.clone(),
+            source: segment.source.clone(),
+            byte_length: segment.bytes.len(),
         });
-        segments.push(ResolvedSegment {
-            class: overlay.class.clone(),
-            overlay: overlay.id.clone(),
-            source: overlay.source.clone(),
-            bytes,
-        });
+        segments.push(segment);
+
+        debug_assert_eq!(normalized_context.len(), required);
     }
 
-    let manifest = ResolvedManifest {
-        pack: pack.id.clone(),
-        schema_family: pack.schema_family.clone(),
-        profile: profile.id.clone(),
-        entries,
-        source_bytes,
-        output_bytes: normalized_context.len(),
-    };
-
     Ok(Composition {
-        manifest,
+        manifest: ResolvedManifest {
+            pack: pack.id.clone(),
+            schema_family: pack.schema_family.clone(),
+            profile: profile.id.clone(),
+            entries,
+            source_bytes,
+            output_bytes: normalized_context.len(),
+        },
         segments,
         normalized_context,
     })
+}
+
+fn checked_output_size(
+    current: usize,
+    additional: usize,
+    maximum: usize,
+) -> Result<usize, CompositionError> {
+    let size = current
+        .checked_add(additional)
+        .ok_or(CompositionError::OutputTooLarge {
+            size: usize::MAX,
+            maximum,
+        })?;
+    if size > maximum {
+        return Err(CompositionError::OutputTooLarge { size, maximum });
+    }
+    Ok(size)
 }
