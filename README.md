@@ -32,6 +32,22 @@ It treats prompt context less like an ad hoc string and more like a build input:
 
 The goal is not to create another prompt-template manager. Invokrum is intended to provide a small, auditable mechanism for systems where prompt composition affects authority, security, cost, quality, or execution behavior.
 
+## Documentation
+
+- [Purpose and scope](docs/purpose.md)
+- [Use cases](docs/use-cases.md)
+- [Architecture](docs/architecture/README.md)
+- [Configuration](docs/configuration.md)
+- [Usage](docs/usage.md)
+- [Development](docs/development.md)
+- [Roadmap](docs/roadmap.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
+- [Support](SUPPORT.md)
+- [Governance](GOVERNANCE.md)
+
+See the [documentation index](docs/README.md) for status conventions and the complete set of project references.
+
 ## Why the name?
 
 **Invokrum** is a technical twist on *involucrum* and *invoke*.
@@ -145,18 +161,7 @@ Anthesis is expected to become an early real-world consumer and compatibility te
 
 ## Roadmap
 
-The active project backlog is tracked in [GitHub Issues](https://github.com/hackelia-micrantha/invokrum/issues).
-
-The critical path is:
-
-1. define the v0.1 architecture and extraction boundary;
-2. implement the typed pack/profile domain model;
-3. publish the first versioned schema;
-4. implement deterministic composition and validation;
-5. add hashes, lockfiles, and resolved manifests;
-6. expose a stable CLI;
-7. prove compatibility against selected Anthesis fixtures;
-8. establish reproducible CI and release artifacts.
+The active project backlog is tracked in [GitHub Issues](https://github.com/hackelia-micrantha/invokrum/issues). The milestone sequence is documented in [docs/roadmap.md](docs/roadmap.md).
 
 ## Security posture
 
@@ -170,21 +175,11 @@ Prompt overlays are configuration **and potentially untrusted content**. Invokru
 - denial of service through pathological input;
 - adapters that bypass or reinterpret validated output.
 
-No security guarantee should be inferred before the relevant controls are implemented and tested. Threat-model work is tracked in [issue #9](https://github.com/hackelia-micrantha/invokrum/issues/9).
+No security guarantee should be inferred before the relevant controls are implemented and tested. See [SECURITY.md](SECURITY.md) and threat-model issue [#9](https://github.com/hackelia-micrantha/invokrum/issues/9).
 
 ## Contributing
 
-The project is intentionally starting with architecture, invariants, and compatibility contracts before broad implementation. Design discussion and focused contributions are welcome through the issue tracker.
-
-Good early contributions include:
-
-- reviewing the mechanism-versus-policy boundary;
-- challenging schema and canonicalization assumptions;
-- contributing adversarial fixtures and failure cases;
-- evaluating Rust APIs and deterministic serialization choices;
-- reviewing the threat model and host-adapter boundaries.
-
-Contributor conventions are tracked in [issue #11](https://github.com/hackelia-micrantha/invokrum/issues/11).
+Design discussion and focused contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [development guide](docs/development.md).
 
 ## License
 
