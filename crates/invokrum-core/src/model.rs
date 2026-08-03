@@ -146,7 +146,11 @@ impl OverlayPack {
         ensure_unique(profiles.iter().map(|profile| &profile.id), "profile")?;
         ensure_unique(variables.iter().map(|variable| &variable.name), "variable")?;
 
-        classes.sort_by(|left, right| left.order.cmp(&right.order).then_with(|| left.id.cmp(&right.id)));
+        classes.sort_by(|left, right| {
+            left.order
+                .cmp(&right.order)
+                .then_with(|| left.id.cmp(&right.id))
+        });
         for pair in classes.windows(2) {
             if pair[0].order == pair[1].order {
                 return Err(DomainError::DuplicateClassOrder(pair[0].order));
@@ -206,7 +210,14 @@ impl OverlayPack {
             }
         }
 
-        Ok(Self { id, schema_family, classes, overlays, profiles, variables })
+        Ok(Self {
+            id,
+            schema_family,
+            classes,
+            overlays,
+            profiles,
+            variables,
+        })
     }
 
     pub fn classes(&self) -> &[OverlayClass] {
@@ -246,16 +257,36 @@ fn ensure_unique<'a>(
 pub enum DomainError {
     InvalidIdentifier(String),
     InvalidPackRelativePath(String),
-    InvalidCardinality { minimum: usize, maximum: Option<usize> },
+    InvalidCardinality {
+        minimum: usize,
+        maximum: Option<usize>,
+    },
     EmptySchemaFamily,
-    DuplicateIdentifier { kind: &'static str, identifier: Identifier },
+    DuplicateIdentifier {
+        kind: &'static str,
+        identifier: Identifier,
+    },
     DuplicateClassOrder(u32),
-    UnknownClass { overlay: Identifier, class: Identifier },
-    UnknownProfileClass { profile: Identifier, class: Identifier },
+    UnknownClass {
+        overlay: Identifier,
+        class: Identifier,
+    },
+    UnknownProfileClass {
+        profile: Identifier,
+        class: Identifier,
+    },
     UnknownOverlayReference(Identifier),
     DuplicateProfileSelection(Identifier),
-    OverlayClassMismatch { overlay: Identifier, expected: Identifier, actual: Identifier },
-    CardinalityViolation { profile: Identifier, class: Identifier, count: usize },
+    OverlayClassMismatch {
+        overlay: Identifier,
+        expected: Identifier,
+        actual: Identifier,
+    },
+    CardinalityViolation {
+        profile: Identifier,
+        class: Identifier,
+        count: usize,
+    },
 }
 
 impl fmt::Display for DomainError {
