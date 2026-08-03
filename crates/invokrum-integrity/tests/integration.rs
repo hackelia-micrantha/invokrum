@@ -6,7 +6,7 @@ use invokrum_core::{
     Variable, compose,
 };
 use invokrum_integrity::{
-    DriftKind, IntegrityError, MAX_LOCKED_OVERLAYS, MAX_LOCKFILE_BYTES, Sha256Digester,
+    Digester, DriftKind, IntegrityError, MAX_LOCKED_OVERLAYS, MAX_LOCKFILE_BYTES, Sha256Digester,
     build_lockfile, decode_lockfile, encode_lockfile, verify,
 };
 
@@ -100,6 +100,18 @@ impl OverlaySource for MemorySource {
     }
 }
 
+struct UnsupportedDigester;
+
+impl Digester for UnsupportedDigester {
+    fn algorithm(&self) -> &'static str {
+        "sha512"
+    }
+
+    fn digest(&self, _bytes: &[u8]) -> String {
+        panic!("unsupported digester must be rejected before hashing")
+    }
+}
+
 fn sources(review: &[u8]) -> MemorySource {
     MemorySource::default()
         .with("overlays/core.md", b"core")
@@ -139,6 +151,27 @@ fn equivalent_declaration_order_produces_identical_lock_bytes() {
     assert_eq!(
         encode_lockfile(&first).expect("lock should encode"),
         encode_lockfile(&second).expect("lock should encode")
+    );
+}
+
+#[test]
+fn lock_construction_returns_only_encodable_v1_material() {
+    let (pack, composition, _) = lockfile();
+    assert_eq!(
+        build_lockfile(&pack, &composition, &UnsupportedDigester),
+        Err(IntegrityError::UnsupportedDigestAlgorithm)
+    );
+
+    let mut oversized_pack = pack(false, false);
+    oversized_pack.schema_family = "x".repeat(MAX_LOCKFILE_BYTES);
+    let oversized_composition = composition(&oversized_pack, &sources(b"review"));
+    assert_eq!(
+        build_lockfile(
+            &oversized_pack,
+            &oversized_composition,
+            &Sha256Digester,
+        ),
+        Err(IntegrityError::LockfileTooLarge)
     );
 }
 
