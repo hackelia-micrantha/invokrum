@@ -63,7 +63,7 @@ fn duplicate_profile_selection_keys_are_rejected_at_any_mapping_depth() {
             }
         }]
     }"#;
-    let duplicate_yaml = r#"
+    let duplicate_yaml = r"
 schema: invokrum.dev/v1
 id: example
 classes:
@@ -75,7 +75,7 @@ profiles:
     selections:
       mode: []
       mode: []
-"#;
+";
 
     assert_eq!(
         parse_json(duplicate_json),
@@ -180,7 +180,7 @@ fn yaml_subset_rejects_parser_expansion_and_complex_features() {
 
 #[test]
 fn yaml_rejects_non_string_mapping_keys() {
-    let input = r#"
+    let input = r"
 schema: invokrum.dev/v1
 id: example
 classes:
@@ -191,7 +191,7 @@ profiles:
   - id: review
     selections:
       1: []
-"#;
+";
 
     assert!(matches!(
         parse_yaml(input),
@@ -201,13 +201,13 @@ profiles:
 
 #[test]
 fn yaml_rejects_multiple_documents_but_accepts_one_start_marker() {
-    let one_document = r#"
+    let one_document = r"
 ---
 schema: invokrum.dev/v1
 id: example
 classes: []
-"#;
-    let multiple_documents = r#"
+";
+    let multiple_documents = r"
 ---
 schema: invokrum.dev/v1
 id: first
@@ -216,7 +216,7 @@ classes: []
 schema: invokrum.dev/v1
 id: second
 classes: []
-"#;
+";
 
     parse_yaml(one_document).expect("one explicit YAML document should be accepted");
     assert_eq!(
