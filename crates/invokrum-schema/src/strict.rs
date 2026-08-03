@@ -50,7 +50,7 @@ pub(crate) enum PreflightError {
 }
 
 pub(crate) fn preflight_json(input: &str) -> Result<(), PreflightError> {
-    serde_json::from_str::<StrictValue>(input)
+    serde_json::from_str::<StrictValue<false>>(input)
         .map(|_| ())
         .map_err(|error| classify_decode("json", &error.to_string()))
 }
@@ -64,7 +64,8 @@ pub(crate) fn preflight_yaml(input: &str) -> Result<(), PreflightError> {
         message: "empty YAML document".to_owned(),
     })?;
 
-    StrictValue::deserialize(first).map_err(|error| classify_decode("yaml", &error.to_string()))?;
+    StrictValue::<true>::deserialize(first)
+        .map_err(|error| classify_decode("yaml", &error.to_string()))?;
 
     if documents.next().is_some() {
         return Err(PreflightError::MultipleYamlDocuments);
@@ -76,7 +77,7 @@ pub(crate) fn preflight_yaml(input: &str) -> Result<(), PreflightError> {
 fn classify_decode(format: &'static str, message: &str) -> PreflightError {
     if message.contains(DUPLICATE_MAPPING_KEY_MARKER) {
         PreflightError::DuplicateMappingKey { format }
-    } else if message.contains(MERGE_MAPPING_KEY_MARKER) {
+    } else if format == "yaml" && message.contains(MERGE_MAPPING_KEY_MARKER) {
         PreflightError::UnsupportedYamlFeature(YamlFeature::MergeKey)
     } else {
         PreflightError::Decode {
@@ -246,21 +247,23 @@ impl Visitor<'_> for StrictKeyVisitor {
     }
 }
 
-struct StrictValue;
+struct StrictValue<const REJECT_MERGE_KEY: bool>;
 
-impl<'de> Deserialize<'de> for StrictValue {
+impl<'de, const REJECT_MERGE_KEY: bool> Deserialize<'de> for StrictValue<REJECT_MERGE_KEY> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_any(StrictValueVisitor)
+        deserializer.deserialize_any(StrictValueVisitor::<REJECT_MERGE_KEY>)
     }
 }
 
-struct StrictValueVisitor;
+struct StrictValueVisitor<const REJECT_MERGE_KEY: bool>;
 
-impl<'de> Visitor<'de> for StrictValueVisitor {
-    type Value = StrictValue;
+impl<'de, const REJECT_MERGE_KEY: bool> Visitor<'de>
+    for StrictValueVisitor<REJECT_MERGE_KEY>
+{
+    type Value = StrictValue<REJECT_MERGE_KEY>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("a scalar, sequence, or string-keyed mapping")
@@ -333,7 +336,10 @@ impl<'de> Visitor<'de> for StrictValueVisitor {
     where
         A: SeqAccess<'de>,
     {
-        while sequence.next_element::<StrictValue>()?.is_some() {}
+        while sequence
+            .next_element::<StrictValue<REJECT_MERGE_KEY>>()?
+            .is_some()
+        {}
         Ok(StrictValue)
     }
 
@@ -343,13 +349,13 @@ impl<'de> Visitor<'de> for StrictValueVisitor {
     {
         let mut keys = BTreeSet::new();
         while let Some(StrictKey(key)) = mapping.next_key::<StrictKey>()? {
-            if key == "<<" {
+            if REJECT_MERGE_KEY && key == "<<" {
                 return Err(de::Error::custom(MERGE_MAPPING_KEY_MARKER));
             }
             if !keys.insert(key) {
                 return Err(de::Error::custom(DUPLICATE_MAPPING_KEY_MARKER));
             }
-            let _: StrictValue = mapping.next_value()?;
+            let _: StrictValue<REJECT_MERGE_KEY> = mapping.next_value()?;
         }
         Ok(StrictValue)
     }
