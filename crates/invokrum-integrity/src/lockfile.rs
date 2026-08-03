@@ -259,6 +259,13 @@ pub fn verify(
     verify_with(lockfile, pack, composition, &Sha256Digester)
 }
 
+/// Verifies current state using an explicitly injected digest implementation.
+///
+/// # Errors
+///
+/// Returns [`IntegrityError`] when the lockfile is unsupported or internally
+/// inconsistent, the digest implementation does not implement v1 SHA-256, or
+/// current lock generation fails.
 pub fn verify_with(
     lockfile: &Lockfile,
     pack: &OverlayPack,
@@ -276,9 +283,7 @@ pub fn verify_with(
         drifts.push(DriftKind::ProfileSelection);
     }
 
-    if !same_overlay_set(&lockfile.manifest.overlays, &current.manifest.overlays) {
-        drifts.push(DriftKind::OverlaySet);
-    } else {
+    if same_overlay_set(&lockfile.manifest.overlays, &current.manifest.overlays) {
         for (index, (expected, actual)) in lockfile
             .manifest
             .overlays
@@ -290,6 +295,8 @@ pub fn verify_with(
                 drifts.push(DriftKind::OverlayContent { index });
             }
         }
+    } else {
+        drifts.push(DriftKind::OverlaySet);
     }
 
     if lockfile.manifest.output != current.manifest.output {
