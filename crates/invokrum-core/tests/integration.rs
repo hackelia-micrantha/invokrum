@@ -69,7 +69,11 @@ fn pack_construction_normalizes_declared_class_order() {
     )
     .expect("pack should be valid");
 
-    let ordered: Vec<_> = pack.classes().iter().map(|class| class.id.as_str()).collect();
+    let ordered: Vec<_> = pack
+        .classes()
+        .iter()
+        .map(|class| class.id.as_str())
+        .collect();
     assert_eq!(ordered, vec!["core", "mode", "quality"]);
 }
 
@@ -107,5 +111,8 @@ fn pack_rejects_profile_selection_from_the_wrong_class() {
         Vec::new(),
     );
 
-    assert!(matches!(result, Err(DomainError::OverlayClassMismatch { .. })));
+    assert!(matches!(
+        result,
+        Err(DomainError::OverlayClassMismatch { .. })
+    ));
 }
