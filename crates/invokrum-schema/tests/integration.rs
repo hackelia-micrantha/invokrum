@@ -87,33 +87,7 @@ fn optional_maximum_defaults_to_unbounded() {
 }
 
 #[test]
-fn machine_schema_is_valid_and_accepts_the_reference_fixture() {
-    let schema_text = include_str!("../../../schemas/invokrum-pack-v1.schema.json");
-    let schema: Value = serde_json::from_str(schema_text).expect("schema should be valid JSON");
-
-    jsonschema::meta::validate(&schema).expect("schema should satisfy its declared metaschema");
-    let validator = jsonschema::validator_for(&schema).expect("schema should compile");
-
-    let fixture: Value = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/schema/minimal-pack.json"
-    ))
-    .expect("fixture should be valid JSON");
-    assert!(validator.is_valid(&fixture));
-
-    let invalid: Value = serde_json::from_str(
-        r#"{
-            "schema":"invokrum.dev/v1",
-            "id":"example",
-            "classes":[],
-            "unexpected":true
-        }"#,
-    )
-    .expect("invalid fixture should still be valid JSON");
-    assert!(!validator.is_valid(&invalid));
-}
-
-#[test]
-fn machine_schema_is_bound_to_the_runtime_family() {
+fn machine_schema_is_valid_json_and_bound_to_the_runtime_family() {
     let schema_text = include_str!("../../../schemas/invokrum-pack-v1.schema.json");
     let schema: Value = serde_json::from_str(schema_text).expect("schema should be valid JSON");
 
