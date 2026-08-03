@@ -88,10 +88,7 @@ fn compose_command(
     deliver(current.composition.normalized_context(), destination)
 }
 
-fn inspect(
-    selection: &PackSelection,
-    format: OutputFormat,
-) -> Result<Execution, CliError> {
+fn inspect(selection: &PackSelection, format: OutputFormat) -> Result<Execution, CliError> {
     let current = compose_selection(selection)?;
     let stdout = match format {
         OutputFormat::Human => inspect_human(&current.composition),
@@ -100,10 +97,7 @@ fn inspect(
     Ok(Execution::success(stdout))
 }
 
-fn lock(
-    selection: &PackSelection,
-    destination: &Destination,
-) -> Result<Execution, CliError> {
+fn lock(selection: &PackSelection, destination: &Destination) -> Result<Execution, CliError> {
     let current = compose_selection(selection)?;
     let lock = build_lockfile(&current.pack, &current.composition, &Sha256Digester)
         .map_err(CliError::integrity)?;
@@ -118,8 +112,8 @@ fn verify_command(
 ) -> Result<Execution, CliError> {
     let expected = load_lock(lock_path)?;
     let current = compose_selection(selection)?;
-    let report = verify(&expected, &current.pack, &current.composition)
-        .map_err(CliError::integrity)?;
+    let report =
+        verify(&expected, &current.pack, &current.composition).map_err(CliError::integrity)?;
     let code = if report.is_verified() {
         crate::EXIT_SUCCESS
     } else {
@@ -221,8 +215,8 @@ fn compose_selection(selection: &PackSelection) -> Result<CurrentComposition, Cl
 
 fn load_pack(path: &Path) -> Result<LoadedPack, CliError> {
     let (source, bytes) = read_local(path, MAX_PACK_BYTES)?;
-    let text = str::from_utf8(&bytes)
-        .map_err(|_| CliError::input("pack document must be valid UTF-8"))?;
+    let text =
+        str::from_utf8(&bytes).map_err(|_| CliError::input("pack document must be valid UTF-8"))?;
     let extension = path
         .extension()
         .and_then(|value| value.to_str())
@@ -280,12 +274,14 @@ fn parse_profile(value: &str) -> Result<Identifier, CliError> {
 }
 
 fn require_profile(pack: &OverlayPack, profile: &Identifier) -> Result<(), CliError> {
-    if pack.profiles().iter().any(|candidate| &candidate.id == profile) {
+    if pack
+        .profiles()
+        .iter()
+        .any(|candidate| &candidate.id == profile)
+    {
         Ok(())
     } else {
-        Err(CliError::validation(format!(
-            "unknown profile `{profile}`"
-        )))
+        Err(CliError::validation(format!("unknown profile `{profile}`")))
     }
 }
 
