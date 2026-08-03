@@ -9,13 +9,17 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "crates" / "invokrum-core"
 SCHEMA = ROOT / "crates" / "invokrum-schema"
+FILESYSTEM = ROOT / "crates" / "invokrum-fs"
 
 FORBIDDEN_CORE_DEPENDENCIES = {
     "clap",
+    "invokrum-fs",
+    "invokrum-schema",
     "reqwest",
     "serde",
     "serde_json",
     "serde_yaml",
+    "serde_yaml_ng",
     "tokio",
     "tracing-subscriber",
 }
@@ -24,11 +28,31 @@ FORBIDDEN_CORE_SOURCE_TOKENS = {
     "serde::",
     "serde_json::",
     "serde_yaml::",
+    "serde_yaml_ng::",
     "std::env::",
     "std::fs::",
     "std::net::",
     "std::process::",
 }
+
+
+def require_inward_adapter(
+    errors: list[str],
+    crate: Path,
+    name: str,
+) -> None:
+    manifest_path = crate / "Cargo.toml"
+    if not manifest_path.is_file():
+        errors.append(f"{name} adapter crate is missing")
+        return
+
+    manifest = manifest_path.read_text(encoding="utf-8")
+    if "invokrum-core" not in manifest:
+        errors.append(f"{name} adapter must depend inward on invokrum-core")
+    if name == "filesystem" and "invokrum-schema" in manifest:
+        errors.append("filesystem adapter must not depend on the schema adapter")
+    if name == "schema" and "invokrum-fs" in manifest:
+        errors.append("schema adapter must not depend on the filesystem adapter")
 
 
 def main() -> int:
@@ -39,16 +63,8 @@ def main() -> int:
         if f"{dependency} =" in core_manifest or f'"{dependency}"' in core_manifest:
             errors.append(f"core manifest contains forbidden outer-layer dependency: {dependency}")
 
-    if "invokrum-schema" in core_manifest:
-        errors.append("core must not depend on the outward schema adapter")
-
-    schema_manifest_path = SCHEMA / "Cargo.toml"
-    if not schema_manifest_path.is_file():
-        errors.append("schema adapter crate is missing")
-    else:
-        schema_manifest = schema_manifest_path.read_text(encoding="utf-8")
-        if "invokrum-core" not in schema_manifest:
-            errors.append("schema adapter must depend inward on invokrum-core")
+    require_inward_adapter(errors, SCHEMA, "schema")
+    require_inward_adapter(errors, FILESYSTEM, "filesystem")
 
     for source in sorted((CORE / "src").rglob("*.rs")):
         text = source.read_text(encoding="utf-8")
