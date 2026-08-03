@@ -134,10 +134,7 @@ fn invalid_example_profile_fails_on_declared_incompatibility() {
         argument("invalid-read-only-implementation"),
     ]);
 
-    assert_eq!(
-        result.status.code(),
-        Some(invokrum_cli::EXIT_COMPOSITION)
-    );
+    assert_eq!(result.status.code(), Some(invokrum_cli::EXIT_VALIDATION));
     assert!(result.stdout.is_empty());
     let stderr = String::from_utf8(result.stderr).expect("stderr should be UTF-8");
     assert!(stderr.contains("overlay `implementation` is incompatible with `read-only`"));
