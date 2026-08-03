@@ -16,6 +16,38 @@ fn yaml_and_json_produce_the_same_normalized_model() {
 }
 
 #[test]
+fn schema_rejects_malformed_json_and_yaml() {
+    assert!(matches!(
+        parse_json(r#"{"schema":"invokrum.dev/v1""#),
+        Err(SchemaError::Decode { format: "json", .. })
+    ));
+    assert!(matches!(
+        parse_yaml("schema: [invokrum.dev/v1"),
+        Err(SchemaError::Decode { format: "yaml", .. })
+    ));
+}
+
+#[test]
+fn schema_rejects_duplicate_named_fields() {
+    let duplicate_json = r#"{
+        "schema":"invokrum.dev/v1",
+        "id":"first",
+        "id":"second",
+        "classes":[]
+    }"#;
+    let duplicate_yaml = "schema: invokrum.dev/v1\nid: first\nid: second\nclasses: []\n";
+
+    assert!(matches!(
+        parse_json(duplicate_json),
+        Err(SchemaError::Decode { format: "json", .. })
+    ));
+    assert!(matches!(
+        parse_yaml(duplicate_yaml),
+        Err(SchemaError::Decode { format: "yaml", .. })
+    ));
+}
+
+#[test]
 fn schema_rejects_unknown_v1_fields() {
     let unknown_field = r#"{
         "schema":"invokrum.dev/v1",

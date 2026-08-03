@@ -4,6 +4,8 @@
 
 Invokrum is pre-release software. No production security guarantee is currently made. Security claims must map to implemented and tested controls.
 
+The accepted [threat model and trust boundaries](docs/security/threat-model.md) classify controls as implemented, partial, planned, delegated, or out of scope. The classification is authoritative for current security claims.
+
 ## Reporting a vulnerability
 
 Do not disclose suspected vulnerabilities in a public issue, discussion, pull request, or generated fixture.
@@ -55,7 +57,7 @@ Invokrum is intended to validate declared composition structure and integrity. I
 - tools or models behave safely;
 - a downloaded pack is trustworthy.
 
-Pack acquisition, signature policy, authorization, execution isolation, and audit retention remain host responsibilities unless a future component explicitly defines otherwise.
+Pack acquisition, signature policy, authorization, execution isolation, and audit retention remain host responsibilities unless a future component explicitly defines otherwise. The complete ownership model is documented in the [threat model](docs/security/threat-model.md).
 
 ## Supported versions
 
