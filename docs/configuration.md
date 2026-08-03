@@ -1,120 +1,126 @@
 # Configuration model
 
 > [!NOTE]
-> This document describes the planned v0.1 configuration contract. The schema is not yet implemented or compatibility-stable.
+> The `invokrum.dev/v1` pack schema is implemented for strict YAML and JSON decoding. Composition, file loading, rendering, lockfiles, and most CLI commands remain planned.
 
 ## Overview
 
-An Invokrum configuration consists of:
+A v1 Invokrum pack consists of:
 
-- an overlay pack declaration;
-- ordered overlay classes;
-- overlay definitions backed by local files;
-- named profiles selecting overlays;
-- declarative validation rules;
-- optional variables supplied at composition time.
+- a schema family and pack identifier;
+- explicitly ordered overlay classes;
+- overlay definitions backed by pack-relative local files;
+- named profiles selecting overlays by class;
+- optional incompatibility declarations;
+- optional variables with sensitivity metadata.
 
-## Planned pack shape
+## Implemented pack shape
 
 ```yaml
-apiVersion: invokrum.dev/v1
-kind: OverlayPack
-
-metadata:
-  name: example
-  version: 0.1.0
+schema: invokrum.dev/v1
+id: example
 
 classes:
-  - name: core
+  - id: core
     order: 10
-    cardinality:
-      min: 1
-      max: 1
-
-  - name: security
+    minimum: 1
+    maximum: 1
+  - id: security
     order: 30
-    cardinality:
-      min: 0
-
-  - name: mode
+    minimum: 0
+  - id: mode
     order: 90
-    cardinality:
-      min: 1
-      max: 1
+    minimum: 1
+    maximum: 1
 
 overlays:
-  core/invariant:
+  - id: core-invariant
     class: core
-    path: overlays/core/invariant.md
-
-  security/default:
+    source: overlays/core/invariant.md
+  - id: security-default
     class: security
-    path: overlays/security/default.md
-
-  mode/review:
+    source: overlays/security/default.md
+  - id: review
     class: mode
-    path: overlays/modes/review.md
+    source: overlays/modes/review.md
+    incompatible_with:
+      - implementation
 
 profiles:
-  secure-review:
-    overlays:
-      - core/invariant
-      - security/default
-      - mode/review
+  - id: secure-review
+    selections:
+      core:
+        - core-invariant
+      security:
+        - security-default
+      mode:
+        - review
+
+variables:
+  - name: repository
+    sensitivity: public
+  - name: access_token
+    sensitivity: secret
 ```
 
-## Ordering
+Unknown fields are rejected. Unsupported schema families fail before strict v1 decoding.
 
-Class order is explicit. Overlay order within a class must also be deterministic, either through declaration order with a canonical representation or an explicit overlay order field. Filesystem traversal order must never influence composition.
+## Ordering and normalization
+
+Class order is explicit through `order`. Filesystem traversal and input map iteration never determine precedence.
+
+The validated aggregate normalizes:
+
+- classes by explicit order;
+- overlays, profiles, and variables by identifier;
+- map keys and set-like incompatibility declarations deterministically.
+
+Selection order within a class is preserved as explicit input.
 
 ## Cardinality
 
-Each class may declare minimum and maximum selections. Typical examples:
+Each class declares a `minimum` and an optional `maximum` using unsigned 32-bit values.
 
-- exactly one core overlay: `min: 1`, `max: 1`;
-- exactly one mode: `min: 1`, `max: 1`;
-- optional environment: `min: 0`, `max: 1`;
-- additive quality overlays: `min: 0`, no bounded maximum.
+Typical examples:
 
-## Compatibility rules
+- exactly one core overlay: `minimum: 1`, `maximum: 1`;
+- exactly one mode: `minimum: 1`, `maximum: 1`;
+- optional environment: `minimum: 0`, `maximum: 1`;
+- additive quality overlays: `minimum: 0`, with `maximum` omitted.
 
-Rules should identify stable overlay or capability identifiers rather than infer semantics from Markdown text. Planned rule categories include:
+Omitted or `null` maximum values are unbounded above. A maximum lower than the minimum is invalid.
 
-- required overlay or class;
-- incompatible overlay pairs or sets;
-- conditional requirement;
-- prohibited combination;
-- class cardinality.
+## Compatibility declarations
 
-Unknown rule kinds must fail closed.
+Each overlay may declare `incompatible_with` as a list of overlay identifiers. Referenced overlays must exist. Duplicate entries are rejected rather than silently normalized.
+
+Evaluation of selected incompatibilities during composition is implemented in issue #4; the v1 schema and domain model already validate declaration structure and references.
 
 ## Paths
 
-Overlay paths are pack-relative. Composition should:
+Overlay sources use portable `/`-separated pack-relative paths. The v1 lexical grammar rejects:
 
-1. establish a canonical pack root;
-2. resolve each declared path against that root;
-3. reject traversal and root escapes;
-4. apply an explicit symlink policy;
-5. reject non-regular or unreadable files where applicable.
+- absolute paths;
+- Windows-style prefixes and backslashes;
+- `:` characters;
+- empty, `.`, or `..` segments;
+- trailing separators.
 
-Runtime HTTP or Git references are out of scope for v0.1. Hosts may acquire and verify packs before invoking Invokrum.
+Composition will additionally establish a canonical pack root, resolve each source, enforce an explicit symlink policy, and reject root escapes. Runtime HTTP or Git references are out of scope for v1.
 
 ## Variables
 
-Variables are expected to be explicit inputs, not ambient environment reads. A variable declaration may include:
+Variables are explicit declarations, not ambient environment reads. The implemented v1 declaration contains:
 
-- name and type;
-- required/default status;
-- whether its value is sensitive;
-- rendering constraints.
+- `name`;
+- `sensitivity`: `public` or `secret`.
 
-Sensitive values must be redacted from diagnostics, manifests, and lockfiles unless an explicit future contract permits otherwise.
+Variable values, defaults, interpolation, and rendering constraints are deferred. Sensitive values must not enter diagnostics, manifests, or lockfiles by default.
 
 ## Profiles
 
-Profiles select overlays but must not silently redefine class order or engine behavior. Profile inheritance is intentionally deferred until its deterministic merge semantics and complexity are justified.
+Profiles contain a `selections` object keyed by class identifier. Each value is an ordered list of overlay identifiers. Profiles cannot redefine class order or engine behavior, and profile inheritance is not part of v1.
 
-## Versioning
+## Machine-readable schema
 
-The API version identifies the schema and normalization rules. Unsupported major versions fail. Compatibility behavior for additive minor changes will be defined with the first published schema in issue #3.
+The JSON Schema is [`schemas/invokrum-pack-v1.schema.json`](../schemas/invokrum-pack-v1.schema.json). See [schema-v1.md](schema-v1.md) for validation and normalization details.

@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::path::{Component, Path};
 
 /// A validated, portable identifier used by pack domain objects.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -40,30 +39,33 @@ impl fmt::Display for Identifier {
     }
 }
 
-/// A non-empty path that cannot lexically escape its pack root.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// A portable, forward-slash-separated path relative to a pack root.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct PackRelativePath(String);
 
 impl PackRelativePath {
-    /// Parses a path relative to the pack root.
+    /// Parses a portable path relative to the pack root.
+    ///
+    /// The v1 path grammar uses `/` separators and rejects platform prefixes,
+    /// backslashes, empty segments, `.` and `..` segments, and trailing `/`.
     ///
     /// # Errors
     ///
-    /// Returns [`DomainError::InvalidPackRelativePath`] when the value is
-    /// empty, absolute, or contains a parent, root, or platform prefix
-    /// component.
+    /// Returns [`DomainError::InvalidPackRelativePath`] when the value does not
+    /// satisfy the portable pack-path grammar.
     pub fn parse(value: impl Into<String>) -> Result<Self, DomainError> {
         let value = value.into();
-        let path = Path::new(&value);
-        if value.is_empty()
-            || path.is_absolute()
-            || path.components().any(|component| {
-                matches!(
-                    component,
-                    Component::ParentDir | Component::RootDir | Component::Prefix(_)
-                )
-            })
-        {
+        let invalid = value.is_empty()
+            || value.starts_with('/')
+            || value.ends_with('/')
+            || value.contains('\\')
+            || value.contains(':')
+            || value.contains('\0')
+            || value
+                .split('/')
+                .any(|segment| segment.is_empty() || matches!(segment, "." | ".."));
+
+        if invalid {
             return Err(DomainError::InvalidPackRelativePath(value));
         }
         Ok(Self(value))
@@ -79,18 +81,18 @@ impl PackRelativePath {
 /// Inclusive minimum and optional maximum selections for an overlay class.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Cardinality {
-    minimum: usize,
-    maximum: Option<usize>,
+    minimum: u32,
+    maximum: Option<u32>,
 }
 
 impl Cardinality {
-    /// Creates a cardinality constraint.
+    /// Creates a cardinality constraint with platform-independent bounds.
     ///
     /// # Errors
     ///
     /// Returns [`DomainError::InvalidCardinality`] when `maximum` is lower
     /// than `minimum`.
-    pub fn new(minimum: usize, maximum: Option<usize>) -> Result<Self, DomainError> {
+    pub fn new(minimum: u32, maximum: Option<u32>) -> Result<Self, DomainError> {
         if maximum.is_some_and(|maximum| maximum < minimum) {
             return Err(DomainError::InvalidCardinality { minimum, maximum });
         }
@@ -99,19 +101,22 @@ impl Cardinality {
 
     /// Returns the inclusive minimum selection count.
     #[must_use]
-    pub const fn minimum(self) -> usize {
+    pub const fn minimum(self) -> u32 {
         self.minimum
     }
 
     /// Returns the inclusive maximum selection count, when bounded.
     #[must_use]
-    pub const fn maximum(self) -> Option<usize> {
+    pub const fn maximum(self) -> Option<u32> {
         self.maximum
     }
 
     /// Reports whether `count` satisfies this cardinality.
     #[must_use]
     pub fn accepts(self, count: usize) -> bool {
+        let Ok(count) = u32::try_from(count) else {
+            return false;
+        };
         count >= self.minimum && self.maximum.is_none_or(|maximum| count <= maximum)
     }
 }
@@ -168,7 +173,9 @@ pub struct OverlayPack {
 impl OverlayPack {
     /// Constructs and validates a complete overlay pack aggregate.
     ///
-    /// Class definitions are normalized by their explicit numeric order.
+    /// Classes are normalized by explicit numeric order. Overlays, profiles,
+    /// and variables are normalized by identifier so equivalent documents do
+    /// not retain incidental declaration order.
     ///
     /// # Errors
     ///
@@ -179,9 +186,9 @@ impl OverlayPack {
         id: Identifier,
         schema_family: impl Into<String>,
         mut classes: Vec<OverlayClass>,
-        overlays: Vec<Overlay>,
-        profiles: Vec<Profile>,
-        variables: Vec<Variable>,
+        mut overlays: Vec<Overlay>,
+        mut profiles: Vec<Profile>,
+        mut variables: Vec<Variable>,
     ) -> Result<Self, DomainError> {
         let schema_family = schema_family.into();
         if schema_family.is_empty() {
@@ -198,6 +205,10 @@ impl OverlayPack {
                 .cmp(&right.order)
                 .then_with(|| left.id.cmp(&right.id))
         });
+        overlays.sort_by(|left, right| left.id.cmp(&right.id));
+        profiles.sort_by(|left, right| left.id.cmp(&right.id));
+        variables.sort_by(|left, right| left.name.cmp(&right.name));
+
         for pair in classes.windows(2) {
             if pair[0].order == pair[1].order {
                 return Err(DomainError::DuplicateClassOrder(pair[0].order));
@@ -278,19 +289,19 @@ impl OverlayPack {
         &self.classes
     }
 
-    /// Returns all declared overlays.
+    /// Returns overlays in deterministic identifier order.
     #[must_use]
     pub fn overlays(&self) -> &[Overlay] {
         &self.overlays
     }
 
-    /// Returns all declared profiles.
+    /// Returns profiles in deterministic identifier order.
     #[must_use]
     pub fn profiles(&self) -> &[Profile] {
         &self.profiles
     }
 
-    /// Returns all declared variables.
+    /// Returns variables in deterministic identifier order.
     #[must_use]
     pub fn variables(&self) -> &[Variable] {
         &self.variables
@@ -319,8 +330,8 @@ pub enum DomainError {
     InvalidIdentifier(String),
     InvalidPackRelativePath(String),
     InvalidCardinality {
-        minimum: usize,
-        maximum: Option<usize>,
+        minimum: u32,
+        maximum: Option<u32>,
     },
     EmptySchemaFamily,
     DuplicateIdentifier {

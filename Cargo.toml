@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/invokrum-core",
+  "crates/invokrum-schema",
   "crates/invokrum-cli",
 ]
 resolver = "2"

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use invokrum_core::{
     Cardinality, DomainError, Identifier, Overlay, OverlayClass, OverlayPack, PackRelativePath,
-    Profile, SCHEMA_FAMILY,
+    Profile,
 };
 
 fn id(value: &str) -> Identifier {
@@ -11,11 +11,6 @@ fn id(value: &str) -> Identifier {
 
 fn path(value: &str) -> PackRelativePath {
     PackRelativePath::parse(value).expect("test path should be valid")
-}
-
-#[test]
-fn public_schema_contract_is_available_to_consumers() {
-    assert_eq!(SCHEMA_FAMILY, "invokrum.dev/v1");
 }
 
 #[test]
@@ -39,15 +34,15 @@ fn pack_construction_normalizes_declared_class_order() {
     ];
     let overlays = vec![
         Overlay {
-            id: id("core-default"),
-            class: id("core"),
-            source: path("overlays/core.md"),
-            incompatible_with: BTreeSet::new(),
-        },
-        Overlay {
             id: id("read-only"),
             class: id("mode"),
             source: path("overlays/read-only.md"),
+            incompatible_with: BTreeSet::new(),
+        },
+        Overlay {
+            id: id("core-default"),
+            class: id("core"),
+            source: path("overlays/core.md"),
             incompatible_with: BTreeSet::new(),
         },
     ];
@@ -61,7 +56,7 @@ fn pack_construction_normalizes_declared_class_order() {
 
     let pack = OverlayPack::new(
         id("example"),
-        SCHEMA_FAMILY,
+        "test/v1",
         classes,
         overlays,
         vec![profile],
@@ -75,6 +70,13 @@ fn pack_construction_normalizes_declared_class_order() {
         .map(|class| class.id.as_str())
         .collect();
     assert_eq!(ordered, vec!["core", "mode", "quality"]);
+
+    let overlays: Vec<_> = pack
+        .overlays()
+        .iter()
+        .map(|overlay| overlay.id.as_str())
+        .collect();
+    assert_eq!(overlays, vec!["core-default", "read-only"]);
 }
 
 #[test]
@@ -104,7 +106,7 @@ fn pack_rejects_profile_selection_from_the_wrong_class() {
 
     let result = OverlayPack::new(
         id("example"),
-        SCHEMA_FAMILY,
+        "test/v1",
         classes,
         overlays,
         vec![profile],
@@ -131,7 +133,7 @@ fn pack_rejects_profile_that_omits_a_required_class() {
 
     let result = OverlayPack::new(
         id("example"),
-        SCHEMA_FAMILY,
+        "test/v1",
         classes,
         Vec::new(),
         vec![profile],

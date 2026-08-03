@@ -1,12 +1,15 @@
 # Invokrum documentation
 
-Invokrum is currently in the architecture and extraction stage. Documentation distinguishes between **accepted design**, **planned interfaces**, and **implemented behavior** so that examples do not imply unsupported functionality.
+Invokrum has an implemented domain model, strict v1 YAML/JSON schema adapter, and layered test baseline. Composition, rendering, lockfiles, attestations, and most CLI behavior remain planned.
+
+Documentation distinguishes between **accepted design**, **planned interfaces**, and **implemented behavior** so examples do not imply unsupported functionality.
 
 ## Start here
 
 - [Purpose and scope](purpose.md)
 - [Use cases](use-cases.md)
 - [Architecture](architecture/README.md)
+- [V1 schema contract](schema-v1.md)
 - [Configuration model](configuration.md)
 - [Usage model](usage.md)
 - [Development guide](development.md)
