@@ -5,6 +5,8 @@
 
 #![forbid(unsafe_code)]
 
+mod strict;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
@@ -14,6 +16,12 @@ use invokrum_core::{
     Profile, Sensitivity, Variable,
 };
 use serde::{Deserialize, Serialize};
+use strict::{PreflightError, preflight_json, preflight_yaml};
+
+pub use strict::YamlFeature;
+
+const MAX_ERROR_MESSAGE_CHARS: usize = 512;
+const MAX_SCHEMA_NAME_CHARS: usize = 128;
 
 /// Schema family implemented by this adapter.
 pub const SCHEMA_FAMILY: &str = "invokrum.dev/v1";
@@ -80,16 +88,18 @@ enum SensitivityDocument {
 
 /// Parse a strict v1 JSON pack document into the validated domain model.
 ///
-/// The schema envelope is checked before the full strict document so a future
-/// schema family receives an unsupported-version error even when it introduces
-/// fields unknown to v1.
+/// A recursive structural preflight rejects duplicate object keys at any depth
+/// before schema-family negotiation. This keeps future-version errors causal
+/// without allowing ambiguous future fields to be silently overwritten.
 ///
 /// # Errors
 ///
-/// Returns [`SchemaError`] when JSON decoding fails, unknown fields are present,
-/// the schema family is unsupported, duplicate set values are present, or domain
-/// invariants are violated.
+/// Returns [`SchemaError`] when JSON decoding fails, mapping keys are repeated,
+/// unknown fields are present, the schema family is unsupported, duplicate list
+/// values are present, or domain invariants are violated.
 pub fn parse_json(input: &str) -> Result<OverlayPack, SchemaError> {
+    preflight_json(input)?;
+
     let envelope: SchemaEnvelope = serde_json::from_str(input)
         .map_err(|error| SchemaError::decode("json", error.to_string()))?;
     ensure_supported_schema(&envelope.schema)?;
@@ -101,16 +111,19 @@ pub fn parse_json(input: &str) -> Result<OverlayPack, SchemaError> {
 
 /// Parse a strict v1 YAML pack document into the validated domain model.
 ///
-/// The schema envelope is checked before the full strict document so a future
-/// schema family receives an unsupported-version error even when it introduces
-/// fields unknown to v1.
+/// A recursive structural preflight rejects duplicate mapping keys at any depth,
+/// multiple documents, and YAML features outside the documented v1 subset before
+/// schema-family negotiation or DTO mapping.
 ///
 /// # Errors
 ///
-/// Returns [`SchemaError`] when YAML decoding fails, unknown fields are present,
-/// the schema family is unsupported, duplicate set values are present, or domain
-/// invariants are violated.
+/// Returns [`SchemaError`] when YAML decoding fails, mapping keys are repeated,
+/// unsupported YAML features are used, multiple documents are supplied, unknown
+/// fields are present, the schema family is unsupported, duplicate list values
+/// are present, or domain invariants are violated.
 pub fn parse_yaml(input: &str) -> Result<OverlayPack, SchemaError> {
+    preflight_yaml(input)?;
+
     let envelope: SchemaEnvelope = serde_yaml_ng::from_str(input)
         .map_err(|error| SchemaError::decode("yaml", error.to_string()))?;
     ensure_supported_schema(&envelope.schema)?;
@@ -130,15 +143,26 @@ pub fn parse_yaml(input: &str) -> Result<OverlayPack, SchemaError> {
 /// Returns [`SchemaError`] if serialization unexpectedly fails.
 pub fn to_normalized_json(pack: &OverlayPack) -> Result<String, SchemaError> {
     serde_json::to_string_pretty(&PackDocument::from(pack))
-        .map_err(|error| SchemaError::Encode(error.to_string()))
+        .map_err(|error| SchemaError::Encode(bounded_text(&error.to_string(), MAX_ERROR_MESSAGE_CHARS)))
 }
 
 fn ensure_supported_schema(schema: &str) -> Result<(), SchemaError> {
     if schema == SCHEMA_FAMILY {
         Ok(())
     } else {
-        Err(SchemaError::UnsupportedSchema(schema.to_owned()))
+        Err(SchemaError::UnsupportedSchema(bounded_text(
+            schema,
+            MAX_SCHEMA_NAME_CHARS,
+        )))
     }
+}
+
+fn bounded_text(value: &str, maximum_chars: usize) -> String {
+    let mut bounded: String = value.chars().take(maximum_chars).collect();
+    if value.chars().count() > maximum_chars {
+        bounded.push('…');
+    }
+    bounded
 }
 
 fn parse_identifier_set(
@@ -311,6 +335,11 @@ pub enum SchemaError {
         format: &'static str,
         message: String,
     },
+    DuplicateMappingKey {
+        format: &'static str,
+    },
+    UnsupportedYamlFeature(YamlFeature),
+    MultipleYamlDocuments,
     Encode(String),
     UnsupportedSchema(String),
     DuplicateListValue {
@@ -322,7 +351,25 @@ pub enum SchemaError {
 
 impl SchemaError {
     fn decode(format: &'static str, message: String) -> Self {
-        Self::Decode { format, message }
+        Self::Decode {
+            format,
+            message: bounded_text(&message, MAX_ERROR_MESSAGE_CHARS),
+        }
+    }
+}
+
+impl From<PreflightError> for SchemaError {
+    fn from(error: PreflightError) -> Self {
+        match error {
+            PreflightError::Decode { format, message } => Self::Decode { format, message },
+            PreflightError::DuplicateMappingKey { format } => {
+                Self::DuplicateMappingKey { format }
+            }
+            PreflightError::UnsupportedYamlFeature(feature) => {
+                Self::UnsupportedYamlFeature(feature)
+            }
+            PreflightError::MultipleYamlDocuments => Self::MultipleYamlDocuments,
+        }
     }
 }
 
@@ -336,6 +383,15 @@ impl fmt::Display for SchemaError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Decode { format, message } => write!(formatter, "invalid {format}: {message}"),
+            Self::DuplicateMappingKey { format } => {
+                write!(formatter, "duplicate mapping key in {format} input")
+            }
+            Self::UnsupportedYamlFeature(feature) => {
+                write!(formatter, "unsupported YAML feature: {feature}")
+            }
+            Self::MultipleYamlDocuments => {
+                formatter.write_str("multiple YAML documents are not supported")
+            }
             Self::Encode(message) => {
                 write!(formatter, "failed to encode normalized JSON: {message}")
             }
