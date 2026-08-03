@@ -10,12 +10,12 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-2f7d65.svg"></a>
-  <img alt="Project status: architecture" src="https://img.shields.io/badge/status-architecture-355f7d.svg">
+  <img alt="Project status: schema baseline" src="https://img.shields.io/badge/status-schema%20baseline-355f7d.svg">
   <img alt="Implementation language: Rust" src="https://img.shields.io/badge/language-Rust-b7410e.svg">
 </p>
 
 > [!IMPORTANT]
-> Invokrum is at the architecture and extraction stage. The interfaces and commands below describe the intended v0.1 direction; they are not yet a released implementation.
+> Invokrum has an implemented domain model, strict v1 YAML/JSON schema adapter, and layered test baseline. Composition, rendering, lockfiles, attestations, and the proposed CLI commands are not yet complete.
 
 ## What is Invokrum?
 
@@ -30,13 +30,14 @@ It treats prompt context less like an ad hoc string and more like a build input:
 - source and rendered content can be hashed and locked;
 - a resolved manifest explains exactly what entered an agent context.
 
-The goal is not to create another prompt-template manager. Invokrum is intended to provide a small, auditable mechanism for systems where prompt composition affects authority, security, cost, quality, or execution behavior.
+The goal is not another prompt-template manager. Invokrum is intended to provide a small, auditable mechanism for systems where prompt composition affects authority, security, cost, quality, or execution behavior.
 
 ## Documentation
 
 - [Purpose and scope](docs/purpose.md)
 - [Use cases](docs/use-cases.md)
 - [Architecture](docs/architecture/README.md)
+- [V1 schema contract](docs/schema-v1.md)
 - [Configuration](docs/configuration.md)
 - [Usage](docs/usage.md)
 - [Development](docs/development.md)
@@ -46,29 +47,27 @@ The goal is not to create another prompt-template manager. Invokrum is intended 
 - [Support](SUPPORT.md)
 - [Governance](GOVERNANCE.md)
 
-See the [documentation index](docs/README.md) for status conventions and the complete set of project references.
+See the [documentation index](docs/README.md) for status conventions and the complete reference set.
 
 ## Why the name?
 
 **Invokrum** is a technical twist on *involucrum* and *invoke*.
 
-In botany, an **involucrum** is a surrounding structure of bracts: modified leaves arranged around and protecting a flower or flower cluster. That maps naturally to a prompt-overlay system, where ordered layers surround a core context and add constraints without weakening what came before.
+In botany, an involucrum is a surrounding structure of bracts: modified leaves arranged around and protecting a flower or flower cluster. That maps naturally to a prompt-overlay system, where ordered layers surround a core context and add constraints without weakening what came before.
 
-The spelling also points to **invocation**. Invokrum is meant to resolve and attest context before an agent, model, or tool is invoked.
-
-The project mark reflects that origin: layered botanical forms surround a deterministic core inside a restrained systems-oriented boundary.
+The spelling also points to invocation. Invokrum resolves and attests context before an agent, model, or tool is invoked.
 
 ## Design principles
 
 1. **Deterministic by construction** — identical normalized inputs produce identical composition and diagnostics.
-2. **Mechanism, not policy** — the engine provides ordering and validation; consumers define their own classes and governance rules.
+2. **Mechanism, not policy** — the engine provides ordering and validation; consumers define their classes and governance rules.
 3. **Fail closed** — ambiguity, missing requirements, unsupported schema versions, and unresolved conflicts are errors.
 4. **Offline composition** — runtime composition does not implicitly fetch mutable remote content.
 5. **Attestable inputs and outputs** — packs, overlays, profiles, variables, and rendered context can be content-addressed.
 6. **Explainable resolution** — machine-readable manifests expose what was selected, in which order, and why.
 7. **Host independence** — Anthesis, CI systems, editors, MCP servers, and agent runtimes integrate through adapters rather than core-specific branches.
 
-The accepted mechanism-versus-policy boundary, invariants, compatibility model, error taxonomy, and v0.1 non-goals are documented in [ADR-0001](docs/architecture/ADR-0001-mechanism-policy-boundary.md).
+The mechanism-versus-policy boundary is documented in [ADR-0001](docs/architecture/ADR-0001-mechanism-policy-boundary.md).
 
 ## Architecture
 
@@ -80,12 +79,17 @@ The accepted mechanism-versus-policy boundary, invariants, compatibility model, 
                              │ stable API / JSON contract
 ┌────────────────────────────▼─────────────────────────────┐
 │ invokrum-cli                                              │
-│ validate · compose · inspect · lock · verify · diff      │
+│ delivery, diagnostics, exit codes, composition root      │
 └────────────────────────────┬─────────────────────────────┘
-                             │ typed Rust API
+                             │ format adapter
+┌────────────────────────────▼─────────────────────────────┐
+│ invokrum-schema                                           │
+│ strict YAML/JSON DTOs · version negotiation · encoding   │
+└────────────────────────────┬─────────────────────────────┘
+                             │ validated domain values
 ┌────────────────────────────▼─────────────────────────────┐
 │ invokrum-core                                             │
-│ model · resolution · rules · rendering · hashing         │
+│ model · invariants · deterministic normalization         │
 └────────────────────────────┬─────────────────────────────┘
                              │
 ┌────────────────────────────▼─────────────────────────────┐
@@ -94,45 +98,52 @@ The accepted mechanism-versus-policy boundary, invariants, compatibility model, 
 └──────────────────────────────────────────────────────────┘
 ```
 
-The initial Rust workspace intentionally starts with two crates:
+The workspace uses durable boundaries rather than placing serialization inside the domain:
 
-- `invokrum-core` owns the generic typed model and deterministic engine behavior;
-- `invokrum-cli` exposes operator-facing and subprocess-safe contracts.
+- `invokrum-core` owns parsing-neutral domain types and engine behavior;
+- `invokrum-schema` translates strict YAML/JSON documents into the domain model;
+- `invokrum-cli` owns delivery concerns and will wire concrete adapters.
 
-Additional crates should be introduced only when they represent a durable compatibility or trust boundary.
+## V1 pack format
 
-## Proposed workflow
-
-A future pack may describe ordered classes and profiles in YAML or JSON:
+The implemented schema family is `invokrum.dev/v1`:
 
 ```yaml
-apiVersion: invokrum.dev/v1
-kind: OverlayPack
-
-metadata:
-  name: example
-  version: 0.1.0
+schema: invokrum.dev/v1
+id: example
 
 classes:
-  - name: core
+  - id: core
     order: 10
-    cardinality: { min: 1, max: 1 }
-  - name: security
-    order: 30
-    cardinality: { min: 0 }
-  - name: mode
+    minimum: 1
+    maximum: 1
+  - id: mode
     order: 90
-    cardinality: { min: 1, max: 1 }
+    minimum: 1
+    maximum: 1
+
+overlays:
+  - id: core-invariant
+    class: core
+    source: overlays/core/invariant.md
+  - id: review
+    class: mode
+    source: overlays/modes/review.md
 
 profiles:
-  secure-review:
-    overlays:
-      - core/invariant
-      - security/default
-      - mode/review
+  - id: secure-review
+    selections:
+      core:
+        - core-invariant
+      mode:
+        - review
 ```
 
-The intended CLI surface is:
+Unknown fields and unsupported schema families fail closed. Paths use a portable forward-slash grammar. See [docs/schema-v1.md](docs/schema-v1.md) and the [machine-readable JSON Schema](schemas/invokrum-pack-v1.schema.json).
+
+## Proposed CLI workflow
+
+The intended CLI surface remains under implementation:
 
 ```bash
 invokrum validate --pack ./pack.yaml --profile secure-review
@@ -147,8 +158,6 @@ invokrum diff     ./baseline.lock ./candidate.lock
 
 Invokrum originates from the prompt-overlay composition model developed inside [Anthesis](https://github.com/hackelia-micrantha/anthesis).
 
-The extraction boundary is deliberate:
-
 | Invokrum owns | Anthesis owns |
 | --- | --- |
 | Generic schemas and domain types | Anthesis overlay taxonomy |
@@ -161,25 +170,17 @@ Anthesis is expected to become an early real-world consumer and compatibility te
 
 ## Roadmap
 
-The active project backlog is tracked in [GitHub Issues](https://github.com/hackelia-micrantha/invokrum/issues). The milestone sequence is documented in [docs/roadmap.md](docs/roadmap.md).
+The active backlog is tracked in [GitHub Issues](https://github.com/hackelia-micrantha/invokrum/issues). The milestone sequence is documented in [docs/roadmap.md](docs/roadmap.md).
 
 ## Security posture
 
-Prompt overlays are configuration **and potentially untrusted content**. Invokrum's design therefore assumes hostile or malformed inputs and plans to address:
-
-- path traversal and symlink escape;
-- ambiguous filesystem resolution;
-- malicious or compromised packs;
-- secret interpolation and accidental persistence;
-- canonicalization and lockfile confusion;
-- denial of service through pathological input;
-- adapters that bypass or reinterpret validated output.
+Prompt overlays are configuration and potentially untrusted content. Invokrum assumes hostile or malformed inputs and plans controls for traversal, symlink escape, malicious packs, secret persistence, canonicalization confusion, denial of service, and unsafe host adapters.
 
 No security guarantee should be inferred before the relevant controls are implemented and tested. See [SECURITY.md](SECURITY.md) and threat-model issue [#9](https://github.com/hackelia-micrantha/invokrum/issues/9).
 
 ## Contributing
 
-Design discussion and focused contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [development guide](docs/development.md).
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [development guide](docs/development.md).
 
 ## License
 
