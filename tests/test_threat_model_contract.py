@@ -23,6 +23,16 @@ class ThreatModelContractTests(unittest.TestCase):
         self.assertEqual(rows, [])
         self.assertTrue(any("must contain exactly five columns" in error for error in errors))
 
+    def test_rejects_malformed_threat_identifier(self) -> None:
+        rows, parse_errors = parse_threat_rows(
+            "| T1 | malformed identifier | Planned | control | issue #4 |\n"
+        )
+        errors = parse_errors + validate_threat_rows(rows, {"T01"})
+
+        self.assertTrue(any("invalid threat ID" in error for error in errors))
+        self.assertTrue(any("missing threat IDs: T01" in error for error in errors))
+        self.assertTrue(any("unexpected threat IDs: T1" in error for error in errors))
+
     def test_accepts_one_complete_row_per_expected_id(self) -> None:
         text = """
 | T01 | first | Implemented | control | tests |
