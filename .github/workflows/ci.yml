@@ -47,8 +47,8 @@ jobs:
       - name: Run unit tests
         run: cargo test --workspace --lib --all-features --locked
 
-  integration:
-    name: Integration tests
+  core-integration:
+    name: Core integration tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -57,6 +57,19 @@ jobs:
         run: rustup show
       - name: Run core integration tests
         run: cargo test -p invokrum-core --test integration --all-features --locked
+
+  schema-integration:
+    name: Schema integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Validate schema JSON syntax
+        run: python3 -m json.tool schemas/invokrum-pack-v1.schema.json >/dev/null
+      - name: Run schema integration tests
+        run: cargo test -p invokrum-schema --test integration --all-features --locked
 
   e2e:
     name: End-to-end tests
