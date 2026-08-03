@@ -55,7 +55,7 @@ Owns strict YAML/JSON decoding, schema-family negotiation, duplicate and unknown
 
 ### `invokrum-fs`
 
-Implements `OverlaySource` for local Linux files. It establishes a canonical root, rejects links and filesystem-boundary crossings, verifies opened-file containment and identity, and returns bytes from one bounded stable read. It depends inward on `invokrum-core` and does not parse schemas or select overlays.
+Implements `OverlaySource` for local Linux files. It establishes and pins a canonical root, rejects links and filesystem device changes, verifies opened-file containment and identity, and returns bytes from one bounded stable read. Same-device bind mounts are excluded by the documented host namespace precondition rather than claimed as automatically detectable. The adapter depends inward on `invokrum-core` and does not parse schemas or select overlays.
 
 The exact platform and namespace contract is documented in [deterministic composition and filesystem contract](../composition-and-filesystem.md).
 
@@ -69,7 +69,7 @@ Consumers own class names and authority order, overlay content, profiles, compat
 
 ### Host adapters
 
-Hosts own pack acquisition and trust, a stable filesystem namespace and protected root, authorization, runtime sandboxing, evidence persistence, and binding exact resolved bytes to execution.
+Hosts own pack acquisition and trust, a stable filesystem namespace without same-device bind aliases below the selected root, a protected root parent, authorization, runtime sandboxing, evidence persistence, and binding exact resolved bytes to execution.
 
 ## Core invariants
 
