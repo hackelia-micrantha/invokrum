@@ -29,6 +29,10 @@ name = "invokrum-cli"
 version = "0.1.0"
 dependencies = [
  "invokrum-core",
+ "invokrum-fs",
+ "invokrum-integrity",
+ "invokrum-schema",
+ "serde_json",
 ]
 
 [[package]]
