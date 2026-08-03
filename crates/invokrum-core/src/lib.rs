@@ -6,6 +6,13 @@
 
 #![forbid(unsafe_code)]
 
+pub mod model;
+
+pub use model::{
+    Cardinality, DomainError, Identifier, Overlay, OverlayClass, OverlayPack, PackRelativePath,
+    Profile, Sensitivity, Variable,
+};
+
 /// Current public schema family understood by the initial architecture.
 pub const SCHEMA_FAMILY: &str = "invokrum.dev/v1";
 
