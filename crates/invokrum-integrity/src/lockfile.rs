@@ -170,7 +170,10 @@ pub fn build_lockfile(
         .find(|profile| profile.id == composition.manifest().profile)
         .ok_or(IntegrityError::UnknownProfile)?;
 
-    let pack_digest = digest_canonical(digester, &pack_bytes(pack).map_err(|_| IntegrityError::Encode)?);
+    let pack_digest = digest_canonical(
+        digester,
+        &pack_bytes(pack).map_err(|_| IntegrityError::Encode)?,
+    );
     let profile_digest = digest_canonical(
         digester,
         &profile_bytes(profile).map_err(|_| IntegrityError::Encode)?,
@@ -186,12 +189,8 @@ pub fn build_lockfile(
             digest: digester.digest(&segment.bytes),
         })
         .collect::<Vec<_>>();
-    let engine_inputs_digest = digest_engine_inputs(
-        digester,
-        &pack_digest,
-        &profile_digest,
-        &overlays,
-    )?;
+    let engine_inputs_digest =
+        digest_engine_inputs(digester, &pack_digest, &profile_digest, &overlays)?;
     let manifest = LockedManifest {
         engine_inputs_digest,
         pack: LockedPack {
@@ -311,19 +310,14 @@ fn ensure_composition_matches(
     Ok(())
 }
 
-fn validate_lockfile(
-    lockfile: &Lockfile,
-    digester: &impl Digester,
-) -> Result<(), IntegrityError> {
+fn validate_lockfile(lockfile: &Lockfile, digester: &impl Digester) -> Result<(), IntegrityError> {
     if lockfile.format != LOCKFILE_FORMAT {
         return Err(IntegrityError::UnsupportedFormat);
     }
     if lockfile.canonicalization != CANONICALIZATION_FORMAT {
         return Err(IntegrityError::UnsupportedCanonicalization);
     }
-    if lockfile.digest_algorithm != SHA256_ALGORITHM
-        || digester.algorithm() != SHA256_ALGORITHM
-    {
+    if lockfile.digest_algorithm != SHA256_ALGORITHM || digester.algorithm() != SHA256_ALGORITHM {
         return Err(IntegrityError::UnsupportedDigestAlgorithm);
     }
     validate_digests(lockfile)?;
