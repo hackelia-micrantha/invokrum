@@ -157,10 +157,7 @@ fn write_platform(path: &Path, bytes: &[u8], force: bool) -> Result<(), OutputEr
         }
     }
 
-    fn verify_parent_identity(
-        parent: &Path,
-        pinned: &fs::Metadata,
-    ) -> Result<(), OutputError> {
+    fn verify_parent_identity(parent: &Path, pinned: &fs::Metadata) -> Result<(), OutputError> {
         let current = fs::symlink_metadata(parent).map_err(|_| OutputError::ParentChanged)?;
         if current.file_type().is_symlink()
             || !current.is_dir()
