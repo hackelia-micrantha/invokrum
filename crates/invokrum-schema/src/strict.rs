@@ -63,8 +63,7 @@ pub(crate) fn preflight_yaml(input: &str) -> Result<(), PreflightError> {
         message: "empty YAML document".to_owned(),
     })?;
 
-    StrictValue::deserialize(first)
-        .map_err(|error| classify_decode("yaml", error.to_string()))?;
+    StrictValue::deserialize(first).map_err(|error| classify_decode("yaml", error.to_string()))?;
 
     if documents.next().is_some() {
         return Err(PreflightError::MultipleYamlDocuments);
@@ -114,14 +113,10 @@ fn validate_yaml_subset(input: &str) -> Result<(), PreflightError> {
             ));
         }
         if surface.contains('&') {
-            return Err(PreflightError::UnsupportedYamlFeature(
-                YamlFeature::Anchor,
-            ));
+            return Err(PreflightError::UnsupportedYamlFeature(YamlFeature::Anchor));
         }
         if surface.contains('*') {
-            return Err(PreflightError::UnsupportedYamlFeature(
-                YamlFeature::Alias,
-            ));
+            return Err(PreflightError::UnsupportedYamlFeature(YamlFeature::Alias));
         }
         if surface.contains('!') {
             return Err(PreflightError::UnsupportedYamlFeature(YamlFeature::Tag));
