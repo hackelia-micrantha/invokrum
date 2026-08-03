@@ -78,7 +78,9 @@ A downloaded or copied pack is untrusted. V0.1 composition performs no acquisiti
 
 Pack paths and filesystem entries are attacker-controlled. The adapter must establish one canonical root, apply explicit symlink and link policies, reject escapes and unacceptable file types, and avoid check-then-use ambiguity. Lexical validation alone is not containment.
 
-Canonical path containment does not prove file provenance when hard links, bind mounts, mount points, junctions, reparse points, or a hostile mount namespace can expose bytes from outside the intended source tree. The implementation must either detect and reject the supported cases or state and enforce a narrower host precondition.
+The v0.1 `invokrum-fs` adapter supports Linux only. It rejects symbolic links at every declared component, hard-linked files, non-regular files, device-boundary crossings, canonical root escapes, and changed file identity or metadata. It validates the opened `/proc/self/fd` target and returns bytes from that same opened file. Non-Linux platforms fail closed as unsupported. The detailed contract is documented in [`docs/composition-and-filesystem.md`](../composition-and-filesystem.md).
+
+Canonical containment still cannot prove provenance against a privileged actor that can remap mounts or the namespace during composition. The host must provide a stable mount namespace and protect the selected root from privileged concurrent manipulation.
 
 ### Boundary C — serialized document to schema adapter
 
@@ -104,7 +106,7 @@ Output destinations may be attacker-controlled or security-sensitive. The delive
 
 - The operating system, Rust runtime, and future cryptographic primitives are not already compromised.
 - The caller can identify the intended local pack root.
-- The host either supplies a filesystem namespace that cannot be remapped during composition or accepts an explicitly documented weaker containment claim.
+- Linux hosts supply a stable mount namespace for the duration of composition.
 - Inputs are explicit rather than read from mutable ambient state by inner layers.
 - Hosts do not treat structural validation as semantic approval.
 - Binary and schema acquisition trust is defined by the operator or host.
@@ -124,20 +126,20 @@ Status meanings:
 | --- | --- | --- | --- | --- |
 | T01 | Invalid syntax, unknown v1 fields, or unsupported schema families create ambiguous interpretation. | Implemented | Strict DTOs, unknown-field rejection, schema preflight, JSON Schema, and fixtures. | `invokrum-schema`; regression CI. |
 | T02 | Duplicate declarations or selected overlay IDs, dangling references, wrong-class selections, or invalid cardinality bypass structural policy. | Implemented | Validated domain values and aggregate construction reject these states. | `invokrum-core`; unit and integration tests. |
-| T03 | Nondeterministic declaration, collection, diagnostic, or filesystem ordering changes output. | Partial | Domain and schema collections normalize deterministically; composition and diagnostic ordering remain. | Issue #4. |
-| T04 | Traversal, platform separators, symlinks, hard links, namespace aliases, mount points, reparse points, or races expose unintended bytes. | Partial | Portable lexical grammar rejects absolute paths, `..`, empty segments, backslashes, drive prefixes, and NUL. | Issue #4 for filesystem policy and stable reads; host namespace precondition. |
+| T03 | Nondeterministic declaration, collection, diagnostic, or filesystem ordering changes output. | Partial | Domain, schema, and composition ordering are deterministic and tested; CLI multi-diagnostic ordering and persistent manifest encoding remain. | Issues #5 and #6. |
+| T04 | Traversal, platform separators, symlinks, hard links, namespace aliases, mount points, reparse points, or races expose unintended bytes. | Partial | Portable lexical validation plus the Linux adapter reject symlinks, hard links, device crossings, root escapes, non-regular files, and changed opened-file identity. Non-Linux platforms fail closed. | Stable host namespace precondition; future platform adapters. |
 | T05 | A structurally valid overlay injects instructions or changes model or tool behavior. | Delegated | Invokrum preserves provenance and structure but does not classify prompt semantics. | Pack trust, host approvals, sandboxing, and capability policy. |
-| T06 | Mutable remote content or substitution changes composition without review. | Partial | Current core and schema layers have no network access; future composition is required to remain offline. | Host acquisition policy; signed distribution requires explicit future design. |
-| T07 | Secret variables leak through diagnostics, manifests, lockfiles, stdout, logs, or crashes. | Planned | Sensitivity is represented; interpolation, redaction, and persistence controls remain. | Issues #4, #5, and #20. |
-| T08 | Hash, canonicalization, manifest, or lockfile confusion represents one artifact as another. | Planned | Exact-byte and compatibility requirements are documented; hashing is not implemented. | Issue #5. |
-| T09 | Pathological nesting, collection size, file size, or output expansion causes denial of service. | Partial | Aliases and block scalars are rejected, and identifiers and numeric schema fields are bounded; aggregate, document, file, and output limits remain. | Issues #4 and #20. |
+| T06 | Mutable remote content or substitution changes composition without review. | Partial | Core, schema, composition, and filesystem adapters perform no network access; runtime composition consumes local bytes only. | Host acquisition policy; signed distribution requires explicit future design. |
+| T07 | Secret variables leak through diagnostics, manifests, lockfiles, stdout, logs, or crashes. | Planned | Sensitivity is represented; interpolation, redaction, and persistence controls remain. | Issues #5, #6, and #20. |
+| T08 | Hash, canonicalization, manifest, or lockfile confusion represents one artifact as another. | Planned | Exact source segments and normalized composition requirements are implemented; hashing and persistent canonical formats are not. | Issue #5. |
+| T09 | Pathological nesting, collection size, file size, or output expansion causes denial of service. | Partial | Aliases and block scalars are rejected; selected-overlay count, per-file bytes, and normalized output bytes are bounded. Serialized document bytes, nesting depth, and declaration counts remain. | Issue #20. |
 | T10 | A host modifies rendered bytes but claims the original digest or verification. | Delegated | Architecture requires exact-byte binding and invalidates claims after transformation. | Host contract; issue #5 provides digest material. |
 | T11 | A host bypasses validation, reinterprets ordering, or invokes a runtime with different inputs. | Delegated | Stable adapter boundaries and composition-root rules are documented. | Host conformance work in issues #7 and #12. |
-| T12 | Parser, dependency, build, release, or artifact compromise changes behavior. | Partial | Pinned Rust toolchain, Cargo lockfile, strict CI, and a maintained YAML adapter are present. | Issue #8 for audits, action pinning, and release gates. |
-| T13 | Errors or source locations expose sensitive content or unstable parser internals. | Partial | Domain errors are typed, parser errors stay behind the schema boundary, and parser-facing messages are bounded. | Issues #4 and #6 for stable redacted diagnostics. |
-| T14 | Self-referential, asymmetric, or inconsistent incompatibility rules produce surprising results. | Partial | References and duplicate list values are validated; complete compatibility evaluation remains. | Issue #4. |
+| T12 | Parser, dependency, build, release, or artifact compromise changes behavior. | Partial | Pinned Rust toolchain, Cargo lockfile, strict CI, and maintained schema dependencies are present. | Issue #8 for audits, action pinning, and release gates. |
+| T13 | Errors or source locations expose sensitive content or unstable parser internals. | Partial | Domain errors are typed, parser messages are bounded, source failures use stable categories, and application source diagnostics do not echo paths. | Issue #6 for complete delivery-layer redaction and escaping. |
+| T14 | Self-referential, asymmetric, or inconsistent incompatibility rules produce surprising results. | Implemented | References are validated and every selected directional or self-incompatibility declaration is evaluated in deterministic composition order before source reads. | `invokrum-core`; composition regression tests. |
 | T15 | Duplicate JSON or YAML mapping keys, aliases, merge keys, tags, or multi-document input create parser-dependent meaning. | Implemented | Recursive structural preflight rejects duplicate keys at every depth; the documented YAML subset rejects directives, aliases, anchors, merge keys, tags, block scalars, explicit complex keys, and multiple documents. | `invokrum-schema`; adversarial regression tests. |
-| T16 | Attacker-controlled paths or parser messages inject control characters into terminals, logs, or machine-output boundaries. | Partial | Identifiers are restricted to ASCII and paths reject NUL, but path controls and human-output escaping are incomplete. | Issues #4 and #6. |
+| T16 | Attacker-controlled paths or parser messages inject control characters into terminals, logs, or machine-output boundaries. | Partial | Identifiers are restricted to ASCII, parser messages are bounded, and application source diagnostics do not echo structured paths. | Issue #6 for any human path presentation and machine-output separation. |
 | T17 | Output paths cause clobbering, symlink following, unsafe permissions, partial writes, or stale artifacts after failure. | Planned | The CLI and persistent output adapters are not implemented. | Issue #6; output adapter tests required. |
 
 ## Security invariants
@@ -164,7 +166,7 @@ These requirements are normative. Unimplemented items remain requirements rather
 
 ### Pack-root escape or namespace alias
 
-An attacker declares `../../secret`, an absolute or Windows-style path, a symlink chain, a hard link, a junction, or a path below a bind mount that exposes unintended bytes. Lexical rejection occurs before I/O. The filesystem adapter must enforce its documented root, link, file-type, and namespace policy; use stable opened bytes; and fail when containment or provenance cannot be established under the supported platform contract.
+An attacker declares `../../secret`, an absolute or Windows-style path, a symlink chain, a hard link, or a path below a mount that exposes unintended bytes. Lexical rejection occurs before I/O. On Linux, `invokrum-fs` rejects links, device changes, canonical escapes, non-regular files, and opened-file identity changes. Windows junction and reparse behavior is not approximated; the adapter fails closed as unsupported. A privileged hostile mount namespace remains a host-controlled residual risk.
 
 ### Ambiguous serialized input
 
@@ -180,7 +182,7 @@ A sensitive value is interpolated and copied into a diagnostic, manifest, lockfi
 
 ### Mutable-input race
 
-A file is validated and then replaced before hashing or rendering. Composition must use stable opened bytes or detect mutation and fail; every resulting artifact describes the same bytes.
+A file is validated and then replaced before hashing or rendering. The Linux adapter compares candidate and opened identity, reads through one open descriptor, verifies the opened target is contained, and compares identity and metadata after reading. Downstream composition and hashing must consume the returned bytes rather than reopening the path.
 
 ### Canonicalization split
 
@@ -188,7 +190,7 @@ Platforms or versions normalize a pack differently but produce comparable-lookin
 
 ### Terminal or log injection
 
-A path or parser message contains newlines, terminal escapes, or delimiter-like text that forges diagnostics or corrupts downstream parsing. Human output must escape or visibly encode controls, while JSON and other machine formats must remain syntactically valid and separate from human stderr.
+A path or parser message contains newlines, terminal escapes, or delimiter-like text that forges diagnostics or corrupts downstream parsing. Application source failures expose stable categories and do not echo paths. Any delivery-layer path presentation must escape or visibly encode controls, while JSON and other machine formats must remain syntactically valid and separate from human stderr.
 
 ### Unsafe output replacement
 
@@ -200,7 +202,7 @@ A host appends instructions after verification and records the original digest. 
 
 ### Resource exhaustion
 
-A pack uses deep nesting, large collections, oversized overlays, or expansion-heavy variables. YAML aliases and block scalars are not accepted, but adapters must still enforce documented byte, depth, collection, file, and output limits before unbounded allocation or growth and return stable errors without bulk attacker content.
+A pack uses deep nesting, large collections, oversized overlays, or expansion-heavy variables. YAML aliases and block scalars are not accepted. Composition bounds selected overlay count, each source read, and normalized output growth; schema document byte, nesting, and declaration-count limits remain required.
 
 ## Responsibility matrix
 
@@ -209,7 +211,7 @@ A pack uses deep nesting, large collections, oversized overlays, or expansion-he
 | Schema and structural validity | Enforce | Produce conforming documents | Reject failures |
 | Duplicate keys and accepted YAML subset | Schema adapter enforces | Avoid unsupported features | Do not bypass decoding |
 | Deterministic ordering and compatibility | Enforce | Declare explicit intent | Do not reinterpret |
-| Local path containment | Filesystem adapter enforces documented policy | Use pack-relative paths | Select protected root, permissions, and namespace |
+| Local path containment | Linux adapter enforces documented policy | Use pack-relative paths | Select protected root and stable namespace; reject unsupported platforms |
 | Publisher authenticity | Not currently provided | Sign or publish through chosen process | Authenticate and pin source |
 | Prompt semantic safety | Not provided | Review and govern content | Apply approvals and capability policy |
 | Secret handling | Enforce declared policy when implemented | Mark variables correctly | Supply values securely and protect outputs |
@@ -226,7 +228,7 @@ The threat-model checker validates document structure and status-table integrity
 
 ## Residual risk
 
-Residual risk includes malicious prompt semantics, compromised hosts or dependencies, unsafe model or tool behavior, stolen signing keys, operator error, hostile filesystem namespaces outside the supported contract, and operating-system or filesystem vulnerabilities. Invokrum reduces ambiguity and improves evidence; it does not replace host security architecture.
+Residual risk includes malicious prompt semantics, compromised hosts or dependencies, unsafe model or tool behavior, stolen signing keys, operator error, privileged hostile mount namespaces, unsupported non-Linux filesystem semantics, and operating-system or filesystem vulnerabilities. Invokrum reduces ambiguity and improves evidence; it does not replace host security architecture.
 
 ## Vulnerability reporting
 
