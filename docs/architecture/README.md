@@ -100,6 +100,8 @@ Hosts own:
 - evidence persistence;
 - binding the resolved digest to an execution.
 
+The security ownership and trust boundaries for these components are normative in the [threat model](../security/threat-model.md).
+
 ## Core invariants
 
 1. Identical normalized inputs produce identical output and diagnostic ordering.
@@ -110,6 +112,8 @@ Hosts own:
 6. Sensitive variables are not persisted by default.
 7. Human output and machine output remain separate contracts.
 8. A host cannot claim Invokrum verification after changing rendered bytes.
+
+Security invariants that are not yet implemented are requirements, not guarantees. Their current control status is tracked in the [threat and control matrix](../security/threat-model.md#threat-and-control-status-matrix).
 
 ## Data flow
 
@@ -161,6 +165,18 @@ The following are compatibility-sensitive and require explicit versioning or rel
 
 Human-readable CLI wording is not intended as a stable parsing contract.
 
+## Security architecture
+
+The accepted [threat model and trust boundaries](../security/threat-model.md) define:
+
+- assets, actors, assumptions, and entry points;
+- acquisition, filesystem, serialization, domain, variable, and host/runtime boundaries;
+- abuse cases and required mitigations;
+- implemented, partial, planned, delegated, and out-of-scope controls;
+- responsibilities assigned to Invokrum, pack authors, operators, and hosts.
+
+Structural validation never implies semantic prompt safety. Exact-byte integrity never implies authorization or safe runtime behavior.
+
 ## Decisions
 
-Architecture decisions are recorded in this directory. The foundational mechanism-versus-policy boundary is defined in [ADR-0001](ADR-0001-mechanism-policy-boundary.md). Clean Architecture, SOLID, dependency injection, and pattern constraints are defined in [clean-solid-and-dependency-injection.md](clean-solid-and-dependency-injection.md).
+Architecture decisions are recorded in this directory. The foundational mechanism-versus-policy boundary is defined in [ADR-0001](ADR-0001-mechanism-policy-boundary.md). Clean Architecture, SOLID, dependency injection, and pattern constraints are defined in [clean-solid-and-dependency-injection.md](clean-solid-and-dependency-injection.md). Security claims and trust ownership are defined in the [threat model](../security/threat-model.md).
