@@ -14,6 +14,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lockfile-preview:
+    name: Generate dependency lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Regenerate and print lockfile
+        run: |
+          rm Cargo.lock
+          cargo generate-lockfile
+          printf 'LOCKFILE_BASE64='
+          base64 -w0 Cargo.lock
+          printf '\n'
+
   quality:
     name: Formatting and linting
     runs-on: ubuntu-latest
