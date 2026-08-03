@@ -90,8 +90,8 @@ fn open_root(root: &Path) -> Result<LocalPackSource, LocalPackSourceError> {
         return Err(LocalPackSourceError::RootNotDirectory);
     }
 
-    let proc_descriptors = fs::metadata("/proc/self/fd")
-        .map_err(|_| LocalPackSourceError::ProcUnavailable)?;
+    let proc_descriptors =
+        fs::metadata("/proc/self/fd").map_err(|_| LocalPackSourceError::ProcUnavailable)?;
     if !proc_descriptors.is_dir() {
         return Err(LocalPackSourceError::ProcUnavailable);
     }
@@ -162,8 +162,8 @@ fn load_source(
         return Err(reject(source, SourceFailureKind::ChangedDuringRead));
     }
 
-    let current = fs::symlink_metadata(&candidate)
-        .map_err(|error| map_post_read_io(source, &error))?;
+    let current =
+        fs::symlink_metadata(&candidate).map_err(|error| map_post_read_io(source, &error))?;
     if current.file_type().is_symlink() {
         return Err(reject(source, SourceFailureKind::SymbolicLink));
     }
@@ -186,12 +186,9 @@ fn load_source(
 }
 
 #[cfg(target_os = "linux")]
-fn verify_root(
-    adapter: &LocalPackSource,
-    source: &PackRelativePath,
-) -> Result<(), SourceFailure> {
-    let metadata = fs::symlink_metadata(&adapter.root)
-        .map_err(|error| map_post_read_io(source, &error))?;
+fn verify_root(adapter: &LocalPackSource, source: &PackRelativePath) -> Result<(), SourceFailure> {
+    let metadata =
+        fs::symlink_metadata(&adapter.root).map_err(|error| map_post_read_io(source, &error))?;
     if metadata.file_type().is_symlink() {
         return Err(reject(source, SourceFailureKind::SymbolicLink));
     }
