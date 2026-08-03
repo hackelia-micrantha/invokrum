@@ -33,6 +33,24 @@ class ThreatModelContractTests(unittest.TestCase):
         self.assertTrue(any("missing threat IDs: T01" in error for error in errors))
         self.assertTrue(any("unexpected threat IDs: T1" in error for error in errors))
 
+    def test_rejects_empty_description(self) -> None:
+        rows, parse_errors = parse_threat_rows(
+            "| T01 | | Planned | control | issue #4 |\n"
+        )
+        errors = parse_errors + validate_threat_rows(rows, {"T01"})
+
+        self.assertTrue(any("empty threat description" in error for error in errors))
+
+    def test_rejects_out_of_order_rows(self) -> None:
+        text = """
+| T02 | second | Partial | control | issue #4 |
+| T01 | first | Implemented | control | tests |
+"""
+        rows, parse_errors = parse_threat_rows(text)
+        errors = parse_errors + validate_threat_rows(rows, {"T01", "T02"})
+
+        self.assertTrue(any("ascending order" in error for error in errors))
+
     def test_accepts_one_complete_row_per_expected_id(self) -> None:
         text = """
 | T01 | first | Implemented | control | tests |
