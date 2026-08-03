@@ -75,9 +75,9 @@ pub(crate) fn preflight_yaml(input: &str) -> Result<(), PreflightError> {
 }
 
 fn classify_decode(format: &'static str, message: &str) -> PreflightError {
-    if message.contains(DUPLICATE_MAPPING_KEY_MARKER) {
+    if message.starts_with(DUPLICATE_MAPPING_KEY_MARKER) {
         PreflightError::DuplicateMappingKey { format }
-    } else if format == "yaml" && message.contains(MERGE_MAPPING_KEY_MARKER) {
+    } else if format == "yaml" && message.starts_with(MERGE_MAPPING_KEY_MARKER) {
         PreflightError::UnsupportedYamlFeature(YamlFeature::MergeKey)
     } else {
         PreflightError::Decode {
@@ -260,9 +260,7 @@ impl<'de, const REJECT_MERGE_KEY: bool> Deserialize<'de> for StrictValue<REJECT_
 
 struct StrictValueVisitor<const REJECT_MERGE_KEY: bool>;
 
-impl<'de, const REJECT_MERGE_KEY: bool> Visitor<'de>
-    for StrictValueVisitor<REJECT_MERGE_KEY>
-{
+impl<'de, const REJECT_MERGE_KEY: bool> Visitor<'de> for StrictValueVisitor<REJECT_MERGE_KEY> {
     type Value = StrictValue<REJECT_MERGE_KEY>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
