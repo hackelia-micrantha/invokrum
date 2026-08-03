@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-2f7d65.svg"></a>
-  <img alt="Project status: design and extraction" src="https://img.shields.io/badge/status-design%20%26%20extraction-355f7d.svg">
-  <img alt="Implementation language: Rust" src="https://img.shields.io/badge/planned-Rust-b7410e.svg">
+  <img alt="Project status: architecture" src="https://img.shields.io/badge/status-architecture-355f7d.svg">
+  <img alt="Implementation language: Rust" src="https://img.shields.io/badge/language-Rust-b7410e.svg">
 </p>
 
 > [!IMPORTANT]
@@ -19,7 +19,7 @@
 
 ## What is Invokrum?
 
-Invokrum is a proposed open-source engine for composing layered prompt context with explicit ordering, compatibility rules, validation, provenance, and reproducible output.
+Invokrum is an open-source engine for composing layered prompt context with explicit ordering, compatibility rules, validation, provenance, and reproducible output.
 
 It treats prompt context less like an ad hoc string and more like a build input:
 
@@ -52,7 +52,9 @@ The project mark reflects that origin: layered botanical forms surround a determ
 6. **Explainable resolution** — machine-readable manifests expose what was selected, in which order, and why.
 7. **Host independence** — Anthesis, CI systems, editors, MCP servers, and agent runtimes integrate through adapters rather than core-specific branches.
 
-## Intended architecture
+The accepted mechanism-versus-policy boundary, invariants, compatibility model, error taxonomy, and v0.1 non-goals are documented in [ADR-0001](docs/architecture/ADR-0001-mechanism-policy-boundary.md).
+
+## Architecture
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
@@ -61,22 +63,27 @@ The project mark reflects that origin: layered botanical forms surround a determ
 └────────────────────────────┬─────────────────────────────┘
                              │ stable API / JSON contract
 ┌────────────────────────────▼─────────────────────────────┐
-│ Invokrum CLI and adapters                                │
+│ invokrum-cli                                              │
 │ validate · compose · inspect · lock · verify · diff      │
 └────────────────────────────┬─────────────────────────────┘
-                             │
+                             │ typed Rust API
 ┌────────────────────────────▼─────────────────────────────┐
-│ Invokrum core                                             │
-│ schema · resolution · rules · rendering · hashing         │
+│ invokrum-core                                             │
+│ model · resolution · rules · rendering · hashing         │
 └────────────────────────────┬─────────────────────────────┘
                              │
 ┌────────────────────────────▼─────────────────────────────┐
 │ Consumer-owned overlay packs                              │
-│ classes · profiles · overlays · compatibility policy      │
+│ classes · profiles · overlays · compatibility policy     │
 └──────────────────────────────────────────────────────────┘
 ```
 
-The initial implementation is planned as a Rust workspace with separate core, schema, and CLI crates. Host-specific adapters should remain thin and preserve the core engine's validation and provenance results.
+The initial Rust workspace intentionally starts with two crates:
+
+- `invokrum-core` owns the generic typed model and deterministic engine behavior;
+- `invokrum-cli` exposes operator-facing and subprocess-safe contracts.
+
+Additional crates should be introduced only when they represent a durable compatibility or trust boundary.
 
 ## Proposed workflow
 
