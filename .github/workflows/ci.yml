@@ -60,7 +60,18 @@ jobs:
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Run core integration tests
-        run: cargo test -p invokrum-core --test integration --all-features --locked
+        run: cargo test -p invokrum-core --tests --all-features --locked
+
+  filesystem-integration:
+    name: Filesystem integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Run fail-closed filesystem tests
+        run: cargo test -p invokrum-fs --tests --all-features --locked
 
   schema-integration:
     name: Schema integration tests
