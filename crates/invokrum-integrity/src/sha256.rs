@@ -152,8 +152,7 @@ fn process_block(state: &mut [u32; 8], block: &[u8]) {
             .wrapping_add(schedule[index]);
         let sum0 =
             working_a.rotate_right(2) ^ working_a.rotate_right(13) ^ working_a.rotate_right(22);
-        let majority =
-            (working_a & working_b) ^ (working_a & working_c) ^ (working_b & working_c);
+        let majority = (working_a & working_b) ^ (working_a & working_c) ^ (working_b & working_c);
         let temporary2 = sum0.wrapping_add(majority);
 
         working_h = working_g;
