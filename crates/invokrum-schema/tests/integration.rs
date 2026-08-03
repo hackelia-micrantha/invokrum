@@ -148,7 +148,7 @@ fn yaml_subset_rejects_parser_expansion_and_complex_features() {
             YamlFeature::Alias,
         ),
         (
-            "schema: invokrum.dev/v1\nid: example\n<<: {}\nclasses: []\n",
+            "schema: invokrum.dev/v1\nid: example\n<<    : {}\nclasses: []\n",
             YamlFeature::MergeKey,
         ),
         (
@@ -176,6 +176,27 @@ fn yaml_subset_rejects_parser_expansion_and_complex_features() {
             "feature should be rejected: {feature}"
         );
     }
+}
+
+#[test]
+fn yaml_rejects_non_string_mapping_keys() {
+    let input = r#"
+schema: invokrum.dev/v1
+id: example
+classes:
+  - id: mode
+    order: 10
+    minimum: 0
+profiles:
+  - id: review
+    selections:
+      1: []
+"#;
+
+    assert!(matches!(
+        parse_yaml(input),
+        Err(SchemaError::Decode { format: "yaml", .. })
+    ));
 }
 
 #[test]
