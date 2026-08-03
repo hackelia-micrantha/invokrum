@@ -37,7 +37,9 @@ mod tests {
             Err(DomainError::InvalidIdentifier(_))
         ));
         assert_eq!(
-            Identifier::parse("read-only").expect("identifier should be valid").as_str(),
+            Identifier::parse("read-only")
+                .expect("identifier should be valid")
+                .as_str(),
             "read-only"
         );
     }
