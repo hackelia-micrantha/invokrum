@@ -2,10 +2,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Component, Path};
 
+/// A validated, portable identifier used by pack domain objects.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Identifier(String);
 
 impl Identifier {
+    /// Parses an identifier containing ASCII letters, digits, `.`, `_`, or `-`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::InvalidIdentifier`] when the value is empty,
+    /// exceeds 128 bytes, or contains an unsupported character.
     pub fn parse(value: impl Into<String>) -> Result<Self, DomainError> {
         let value = value.into();
         if value.is_empty() || value.len() > 128 {
@@ -20,6 +27,8 @@ impl Identifier {
         Ok(Self(value))
     }
 
+    /// Returns the validated identifier text.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -31,10 +40,18 @@ impl fmt::Display for Identifier {
     }
 }
 
+/// A non-empty path that cannot lexically escape its pack root.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PackRelativePath(String);
 
 impl PackRelativePath {
+    /// Parses a path relative to the pack root.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::InvalidPackRelativePath`] when the value is
+    /// empty, absolute, or contains a parent, root, or platform prefix
+    /// component.
     pub fn parse(value: impl Into<String>) -> Result<Self, DomainError> {
         let value = value.into();
         let path = Path::new(&value);
@@ -52,11 +69,14 @@ impl PackRelativePath {
         Ok(Self(value))
     }
 
+    /// Returns the validated pack-relative path text.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
+/// Inclusive minimum and optional maximum selections for an overlay class.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Cardinality {
     minimum: usize,
@@ -64,6 +84,12 @@ pub struct Cardinality {
 }
 
 impl Cardinality {
+    /// Creates a cardinality constraint.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::InvalidCardinality`] when `maximum` is lower
+    /// than `minimum`.
     pub fn new(minimum: usize, maximum: Option<usize>) -> Result<Self, DomainError> {
         if maximum.is_some_and(|maximum| maximum < minimum) {
             return Err(DomainError::InvalidCardinality { minimum, maximum });
@@ -71,31 +97,40 @@ impl Cardinality {
         Ok(Self { minimum, maximum })
     }
 
+    /// Returns the inclusive minimum selection count.
+    #[must_use]
     pub const fn minimum(self) -> usize {
         self.minimum
     }
 
+    /// Returns the inclusive maximum selection count, when bounded.
+    #[must_use]
     pub const fn maximum(self) -> Option<usize> {
         self.maximum
     }
 
+    /// Reports whether `count` satisfies this cardinality.
+    #[must_use]
     pub fn accepts(self, count: usize) -> bool {
         count >= self.minimum && self.maximum.is_none_or(|maximum| count <= maximum)
     }
 }
 
+/// Whether a variable may be exposed in ordinary outputs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Sensitivity {
     Public,
     Secret,
 }
 
+/// A declared variable and its sensitivity classification.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Variable {
     pub name: Identifier,
     pub sensitivity: Sensitivity,
 }
 
+/// An explicitly ordered overlay class.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OverlayClass {
     pub id: Identifier,
@@ -103,6 +138,7 @@ pub struct OverlayClass {
     pub cardinality: Cardinality,
 }
 
+/// A selectable overlay belonging to one class.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Overlay {
     pub id: Identifier,
@@ -111,12 +147,14 @@ pub struct Overlay {
     pub incompatible_with: BTreeSet<Identifier>,
 }
 
+/// A named set of overlay selections keyed by class.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Profile {
     pub id: Identifier,
     pub selections: BTreeMap<Identifier, Vec<Identifier>>,
 }
 
+/// The validated aggregate root for a complete overlay pack.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OverlayPack {
     pub id: Identifier,
@@ -128,6 +166,15 @@ pub struct OverlayPack {
 }
 
 impl OverlayPack {
+    /// Constructs and validates a complete overlay pack aggregate.
+    ///
+    /// Class definitions are normalized by their explicit numeric order.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`DomainError`] for duplicate declarations, duplicate class
+    /// ordering, dangling references, class mismatches, invalid profile
+    /// cardinality, or an empty schema family.
     pub fn new(
         id: Identifier,
         schema_family: impl Into<String>,
@@ -175,23 +222,28 @@ impl OverlayPack {
         }
 
         for profile in &profiles {
-            for (class, selected) in &profile.selections {
-                let class_definition = classes
-                    .iter()
-                    .find(|candidate| &candidate.id == class)
-                    .ok_or_else(|| DomainError::UnknownProfileClass {
+            for class in profile.selections.keys() {
+                if !class_ids.contains(class) {
+                    return Err(DomainError::UnknownProfileClass {
                         profile: profile.id.clone(),
                         class: class.clone(),
-                    })?;
-                if !class_definition.cardinality.accepts(selected.len()) {
-                    return Err(DomainError::CardinalityViolation {
-                        profile: profile.id.clone(),
-                        class: class.clone(),
-                        count: selected.len(),
                     });
                 }
+            }
+
+            for class_definition in &classes {
+                let selected = profile.selections.get(&class_definition.id);
+                let count = selected.map_or(0, Vec::len);
+                if !class_definition.cardinality.accepts(count) {
+                    return Err(DomainError::CardinalityViolation {
+                        profile: profile.id.clone(),
+                        class: class_definition.id.clone(),
+                        count,
+                    });
+                }
+
                 let mut seen = BTreeSet::new();
-                for overlay_id in selected {
+                for overlay_id in selected.into_iter().flatten() {
                     if !seen.insert(overlay_id) {
                         return Err(DomainError::DuplicateProfileSelection(overlay_id.clone()));
                     }
@@ -199,10 +251,10 @@ impl OverlayPack {
                         .iter()
                         .find(|candidate| &candidate.id == overlay_id)
                         .ok_or_else(|| DomainError::UnknownOverlayReference(overlay_id.clone()))?;
-                    if overlay.class != *class {
+                    if overlay.class != class_definition.id {
                         return Err(DomainError::OverlayClassMismatch {
                             overlay: overlay.id.clone(),
-                            expected: class.clone(),
+                            expected: class_definition.id.clone(),
                             actual: overlay.class.clone(),
                         });
                     }
@@ -220,18 +272,26 @@ impl OverlayPack {
         })
     }
 
+    /// Returns classes in deterministic declared order.
+    #[must_use]
     pub fn classes(&self) -> &[OverlayClass] {
         &self.classes
     }
 
+    /// Returns all declared overlays.
+    #[must_use]
     pub fn overlays(&self) -> &[Overlay] {
         &self.overlays
     }
 
+    /// Returns all declared profiles.
+    #[must_use]
     pub fn profiles(&self) -> &[Profile] {
         &self.profiles
     }
 
+    /// Returns all declared variables.
+    #[must_use]
     pub fn variables(&self) -> &[Variable] {
         &self.variables
     }
@@ -253,6 +313,7 @@ fn ensure_unique<'a>(
     Ok(())
 }
 
+/// A domain invariant violation encountered while constructing a pack.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DomainError {
     InvalidIdentifier(String),
