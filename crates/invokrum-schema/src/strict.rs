@@ -64,7 +64,8 @@ pub(crate) fn preflight_yaml(input: &str) -> Result<(), PreflightError> {
         message: "empty YAML document".to_owned(),
     })?;
 
-    StrictValue::<true>::deserialize(first).map_err(|error| classify_decode("yaml", &error.to_string()))?;
+    StrictValue::<true>::deserialize(first)
+        .map_err(|error| classify_decode("yaml", &error.to_string()))?;
 
     if documents.next().is_some() {
         return Err(PreflightError::MultipleYamlDocuments);
@@ -259,9 +260,7 @@ impl<'de, const REJECT_MERGE_KEY: bool> Deserialize<'de> for StrictValue<REJECT_
 
 struct StrictValueVisitor<const REJECT_MERGE_KEY: bool>;
 
-impl<'de, const REJECT_MERGE_KEY: bool> Visitor<'de>
-    for StrictValueVisitor<REJECT_MERGE_KEY>
-{
+impl<'de, const REJECT_MERGE_KEY: bool> Visitor<'de> for StrictValueVisitor<REJECT_MERGE_KEY> {
     type Value = StrictValue<REJECT_MERGE_KEY>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
