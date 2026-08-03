@@ -207,9 +207,7 @@ classes: []
 #[test]
 fn unsupported_schema_names_are_bounded_in_errors() {
     let schema = "x".repeat(1_024);
-    let document = format!(
-        "{{\"schema\":\"{schema}\",\"id\":\"example\",\"classes\":[]}}"
-    );
+    let document = format!("{{\"schema\":\"{schema}\",\"id\":\"example\",\"classes\":[]}}");
 
     let Err(SchemaError::UnsupportedSchema(reported)) = parse_json(&document) else {
         panic!("long schema family should be unsupported");
