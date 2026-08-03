@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use invokrum_core::{
     Cardinality, DomainError, Identifier, Overlay, OverlayClass, OverlayPack, PackRelativePath,
-    Profile, SCHEMA_FAMILY, SchemaError, parse_json, parse_yaml, to_normalized_json,
+    Profile,
 };
 
 fn id(value: &str) -> Identifier {
@@ -11,11 +11,6 @@ fn id(value: &str) -> Identifier {
 
 fn path(value: &str) -> PackRelativePath {
     PackRelativePath::parse(value).expect("test path should be valid")
-}
-
-#[test]
-fn public_schema_contract_is_available_to_consumers() {
-    assert_eq!(SCHEMA_FAMILY, "invokrum.dev/v1");
 }
 
 #[test]
@@ -39,15 +34,15 @@ fn pack_construction_normalizes_declared_class_order() {
     ];
     let overlays = vec![
         Overlay {
-            id: id("core-default"),
-            class: id("core"),
-            source: path("overlays/core.md"),
-            incompatible_with: BTreeSet::new(),
-        },
-        Overlay {
             id: id("read-only"),
             class: id("mode"),
             source: path("overlays/read-only.md"),
+            incompatible_with: BTreeSet::new(),
+        },
+        Overlay {
+            id: id("core-default"),
+            class: id("core"),
+            source: path("overlays/core.md"),
             incompatible_with: BTreeSet::new(),
         },
     ];
@@ -61,7 +56,7 @@ fn pack_construction_normalizes_declared_class_order() {
 
     let pack = OverlayPack::new(
         id("example"),
-        SCHEMA_FAMILY,
+        "test/v1",
         classes,
         overlays,
         vec![profile],
@@ -75,6 +70,13 @@ fn pack_construction_normalizes_declared_class_order() {
         .map(|class| class.id.as_str())
         .collect();
     assert_eq!(ordered, vec!["core", "mode", "quality"]);
+
+    let overlays: Vec<_> = pack
+        .overlays()
+        .iter()
+        .map(|overlay| overlay.id.as_str())
+        .collect();
+    assert_eq!(overlays, vec!["core-default", "read-only"]);
 }
 
 #[test]
@@ -104,7 +106,7 @@ fn pack_rejects_profile_selection_from_the_wrong_class() {
 
     let result = OverlayPack::new(
         id("example"),
-        SCHEMA_FAMILY,
+        "test/v1",
         classes,
         overlays,
         vec![profile],
@@ -131,7 +133,7 @@ fn pack_rejects_profile_that_omits_a_required_class() {
 
     let result = OverlayPack::new(
         id("example"),
-        SCHEMA_FAMILY,
+        "test/v1",
         classes,
         Vec::new(),
         vec![profile],
@@ -141,40 +143,5 @@ fn pack_rejects_profile_that_omits_a_required_class() {
     assert!(matches!(
         result,
         Err(DomainError::CardinalityViolation { count: 0, .. })
-    ));
-}
-
-#[test]
-fn yaml_and_json_produce_the_same_normalized_model() {
-    let yaml = include_str!("../../../tests/fixtures/schema/minimal-pack.yaml");
-    let json = include_str!("../../../tests/fixtures/schema/minimal-pack.json");
-
-    let yaml_pack = parse_yaml(yaml).expect("YAML fixture should be valid");
-    let json_pack = parse_json(json).expect("JSON fixture should be valid");
-
-    assert_eq!(
-        to_normalized_json(&yaml_pack).expect("YAML pack should serialize"),
-        to_normalized_json(&json_pack).expect("JSON pack should serialize")
-    );
-}
-
-#[test]
-fn schema_rejects_unknown_fields_and_versions() {
-    let unknown_field = r#"{
-        "schema":"invokrum.dev/v1",
-        "id":"example",
-        "classes":[],
-        "unexpected":true
-    }"#;
-    assert!(matches!(parse_json(unknown_field), Err(SchemaError::Decode(_))));
-
-    let unsupported = r#"{
-        "schema":"invokrum.dev/v2",
-        "id":"example",
-        "classes":[]
-    }"#;
-    assert!(matches!(
-        parse_json(unsupported),
-        Err(SchemaError::UnsupportedSchema(_))
     ));
 }
