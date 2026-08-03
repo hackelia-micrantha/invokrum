@@ -56,10 +56,13 @@ pub(crate) fn profile_bytes(profile: &Profile) -> Result<Vec<u8>, String> {
 }
 
 pub(crate) fn canonical_json<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
-    serde_json::to_vec(value).map_err(|error| bounded(error.to_string()))
+    serde_json::to_vec(value).map_err(|error| {
+        let message = error.to_string();
+        bounded(&message)
+    })
 }
 
-fn bounded(value: String) -> String {
+fn bounded(value: &str) -> String {
     let mut result: String = value.chars().take(MAX_ERROR_CHARS).collect();
     if value.chars().count() > MAX_ERROR_CHARS {
         result.push('…');
