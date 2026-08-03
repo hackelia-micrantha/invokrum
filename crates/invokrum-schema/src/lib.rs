@@ -101,11 +101,11 @@ pub fn parse_json(input: &str) -> Result<OverlayPack, SchemaError> {
     preflight_json(input)?;
 
     let envelope: SchemaEnvelope = serde_json::from_str(input)
-        .map_err(|error| SchemaError::decode("json", error.to_string()))?;
+        .map_err(|error| SchemaError::decode("json", &error.to_string()))?;
     ensure_supported_schema(&envelope.schema)?;
 
     let document: PackDocument = serde_json::from_str(input)
-        .map_err(|error| SchemaError::decode("json", error.to_string()))?;
+        .map_err(|error| SchemaError::decode("json", &error.to_string()))?;
     document.try_into()
 }
 
@@ -125,11 +125,11 @@ pub fn parse_yaml(input: &str) -> Result<OverlayPack, SchemaError> {
     preflight_yaml(input)?;
 
     let envelope: SchemaEnvelope = serde_yaml_ng::from_str(input)
-        .map_err(|error| SchemaError::decode("yaml", error.to_string()))?;
+        .map_err(|error| SchemaError::decode("yaml", &error.to_string()))?;
     ensure_supported_schema(&envelope.schema)?;
 
     let document: PackDocument = serde_yaml_ng::from_str(input)
-        .map_err(|error| SchemaError::decode("yaml", error.to_string()))?;
+        .map_err(|error| SchemaError::decode("yaml", &error.to_string()))?;
     document.try_into()
 }
 
@@ -351,10 +351,10 @@ pub enum SchemaError {
 }
 
 impl SchemaError {
-    fn decode(format: &'static str, message: String) -> Self {
+    fn decode(format: &'static str, message: &str) -> Self {
         Self::Decode {
             format,
-            message: bounded_text(&message, MAX_ERROR_MESSAGE_CHARS),
+            message: bounded_text(message, MAX_ERROR_MESSAGE_CHARS),
         }
     }
 }
