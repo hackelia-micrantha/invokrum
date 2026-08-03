@@ -108,13 +108,8 @@ fn sources(review: &[u8]) -> MemorySource {
 }
 
 fn composition(pack: &OverlayPack, source: &MemorySource) -> Composition {
-    compose(
-        pack,
-        &id("default"),
-        source,
-        CompositionLimits::default(),
-    )
-    .expect("composition should succeed")
+    compose(pack, &id("default"), source, CompositionLimits::default())
+        .expect("composition should succeed")
 }
 
 #[test]
