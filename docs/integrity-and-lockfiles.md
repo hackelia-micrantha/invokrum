@@ -36,7 +36,18 @@ Canonical bytes are compact UTF-8 JSON with no insignificant whitespace or trail
 
 Numbers are JSON integers. Strings are escaped by the JSON encoder without platform path conversion. Pack-relative paths retain their validated forward-slash representation.
 
-Changing any rule requires a new canonicalization identifier.
+The v1 decoder requires the supplied bytes to equal the canonical re-encoding exactly. Whitespace changes, reordered fields, duplicate keys, alternate string escapes, and trailing bytes fail rather than being silently normalized. Changing any canonical rule requires a new canonicalization identifier.
+
+## Resource and identity limits
+
+V1 fails before unbounded decoding when:
+
+- lockfile input exceeds 1 MiB;
+- a manifest contains more than 256 selected overlays.
+
+Pack, profile, overlay, and class identities must satisfy the core identifier grammar. Every overlay source must satisfy the portable pack-relative path grammar. This prevents decoded evidence from introducing path traversal or control-character identities that could later cross a diagnostic or output boundary.
+
+These limits apply to lock evidence. Schema-document and composition limits remain separately defined by their owning adapters.
 
 ## Digest domains
 
@@ -112,19 +123,22 @@ The manifest digest is not a signature or message-authentication code. Anyone ab
 }
 ```
 
-Unknown fields are rejected by the v1 decoder.
+Unknown fields and duplicate known fields are rejected by the v1 decoder.
 
 ## Verification order
 
 Verification is deterministic and fail-closed:
 
-1. decode strict JSON;
-2. validate format, canonicalization, and digest algorithm identifiers;
-3. validate every digest representation;
-4. recompute the stored engine-input digest;
-5. recompute the stored manifest digest;
-6. generate current lock material from the supplied pack and composition;
-7. report ordered drift categories.
+1. reject an oversized byte stream;
+2. decode strict JSON;
+3. validate format, canonicalization, and digest algorithm identifiers;
+4. enforce overlay-count and identity/path limits;
+5. validate every digest representation;
+6. recompute the stored engine-input digest;
+7. recompute the stored manifest digest;
+8. require exact canonical input bytes;
+9. generate current lock material from the supplied pack and composition;
+10. report ordered drift categories.
 
 Drift categories are:
 
@@ -134,7 +148,7 @@ Drift categories are:
 4. per-overlay content by deterministic index;
 5. rendered output.
 
-A malformed, unsupported, or internally inconsistent lock is an integrity error, not repository drift.
+A malformed, unsupported, noncanonical, or internally inconsistent lock is an integrity error, not repository drift.
 
 ## Sensitive data policy
 
