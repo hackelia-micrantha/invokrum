@@ -50,6 +50,7 @@ THREAT_ID = re.compile(r"^T\d{2}$")
 @dataclass(frozen=True)
 class ThreatRow:
     threat_id: str
+    description: str
     status: str
     control: str
     owner: str
@@ -72,7 +73,7 @@ def parse_threat_rows(text: str) -> tuple[list[ThreatRow], list[str]]:
             )
             continue
 
-        threat_id, _description, status, control, owner = cells
+        threat_id, description, status, control, owner = cells
         if not THREAT_ID.fullmatch(threat_id):
             errors.append(
                 f"invalid threat ID `{threat_id}` on line {line_number}; expected T followed by two digits"
@@ -81,6 +82,7 @@ def parse_threat_rows(text: str) -> tuple[list[ThreatRow], list[str]]:
         rows.append(
             ThreatRow(
                 threat_id=threat_id,
+                description=description,
                 status=status,
                 control=control,
                 owner=owner,
@@ -94,9 +96,10 @@ def parse_threat_rows(text: str) -> tuple[list[ThreatRow], list[str]]:
 def validate_threat_rows(
     rows: list[ThreatRow], expected_threats: set[str]
 ) -> list[str]:
-    """Validate identifiers, statuses, evidence cells, and table completeness."""
+    """Validate identifiers, statuses, content cells, and table completeness."""
     errors: list[str] = []
-    counts = Counter(row.threat_id for row in rows)
+    identifiers = [row.threat_id for row in rows]
+    counts = Counter(identifiers)
 
     duplicates = sorted(threat_id for threat_id, count in counts.items() if count > 1)
     if duplicates:
@@ -110,11 +113,17 @@ def validate_threat_rows(
     if unexpected:
         errors.append(f"unexpected threat IDs: {', '.join(unexpected)}")
 
+    expected_order = sorted(expected_threats)
+    if not missing and not unexpected and not duplicates and identifiers != expected_order:
+        errors.append("threat IDs must appear once in ascending order")
+
     for row in rows:
         if row.status not in ALLOWED_STATUSES:
             errors.append(
                 f"invalid status `{row.status}` for {row.threat_id} on line {row.line_number}"
             )
+        if not row.description:
+            errors.append(f"{row.threat_id} has an empty threat description")
         if not row.control:
             errors.append(f"{row.threat_id} has an empty control cell")
         if not row.owner:
