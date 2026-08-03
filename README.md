@@ -10,12 +10,12 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-2f7d65.svg"></a>
-  <img alt="Project status: composition baseline" src="https://img.shields.io/badge/status-composition%20baseline-355f7d.svg">
+  <img alt="Project status: integrity baseline" src="https://img.shields.io/badge/status-integrity%20baseline-355f7d.svg">
   <img alt="Implementation language: Rust" src="https://img.shields.io/badge/language-Rust-b7410e.svg">
 </p>
 
 > [!IMPORTANT]
-> Invokrum has an implemented domain model, strict v1 YAML/JSON schema adapter, deterministic composition use case, and fail-closed Linux filesystem adapter. CLI composition, hashing, lockfiles, and attestations are not yet complete.
+> Invokrum has an implemented domain model, strict v1 YAML/JSON schema adapter, deterministic composition use case, fail-closed Linux filesystem adapter, and canonical lockfile verification adapter. CLI composition roots, atomic output persistence, publisher authentication, and runtime integrations are not yet complete.
 
 ## What is Invokrum?
 
@@ -27,7 +27,8 @@ It treats prompt context less like an ad hoc string and more like a build input:
 - profiles select a bounded set of overlays;
 - ordering and cardinality are deterministic;
 - incompatible combinations fail closed;
-- source and rendered content can be hashed and locked;
+- selected source bytes and rendered output are content-addressed;
+- versioned lockfiles distinguish configuration, content, and output drift;
 - a resolved manifest explains exactly what entered an agent context.
 
 The goal is not another prompt-template manager. Invokrum is intended to provide a small, auditable mechanism for systems where prompt composition affects authority, security, cost, quality, or execution behavior.
@@ -38,6 +39,7 @@ The goal is not another prompt-template manager. Invokrum is intended to provide
 - [Use cases](docs/use-cases.md)
 - [Architecture](docs/architecture/README.md)
 - [Deterministic composition and filesystem contract](docs/composition-and-filesystem.md)
+- [Integrity, canonical manifests, and lockfiles](docs/integrity-and-lockfiles.md)
 - [Threat model and trust boundaries](docs/security/threat-model.md)
 - [V1 schema contract](docs/schema-v1.md)
 - [Configuration](docs/configuration.md)
@@ -61,12 +63,12 @@ The spelling also points to invocation. Invokrum resolves and attests context be
 
 ## Design principles
 
-1. **Deterministic by construction** — identical normalized inputs produce identical composition and diagnostics.
+1. **Deterministic by construction** — identical normalized inputs produce identical composition, lock bytes, and diagnostics.
 2. **Mechanism, not policy** — the engine provides ordering and validation; consumers define their classes and governance rules.
-3. **Fail closed** — ambiguity, missing requirements, unsupported schema versions, and unresolved conflicts are errors.
+3. **Fail closed** — ambiguity, missing requirements, unsupported versions, invalid digests, and unresolved conflicts are errors.
 4. **Offline composition** — runtime composition does not implicitly fetch mutable remote content.
-5. **Attestable inputs and outputs** — packs, overlays, profiles, variables, and rendered context can be content-addressed.
-6. **Explainable resolution** — machine-readable manifests expose what was selected, in which order, and why.
+5. **Attestable inputs and outputs** — packs, profiles, selected overlays, and rendered context are content-addressed.
+6. **Explainable resolution** — machine-readable manifests expose what was selected, in which order, and which category drifted.
 7. **Host independence** — Anthesis, CI systems, editors, MCP servers, and agent runtimes integrate through adapters rather than core-specific branches.
 
 The mechanism-versus-policy boundary is documented in [ADR-0001](docs/architecture/ADR-0001-mechanism-policy-boundary.md).
@@ -82,14 +84,15 @@ The mechanism-versus-policy boundary is documented in [ADR-0001](docs/architectu
 ┌────────────────────────────▼─────────────────────────────┐
 │ invokrum-cli                                              │
 │ delivery, diagnostics, exit codes, composition root      │
-└───────────────┬──────────────────────────┬───────────────┘
-                │ format adapter           │ source adapter
-┌───────────────▼────────────────┐  ┌──────▼───────────────┐
-│ invokrum-schema                │  │ invokrum-fs          │
-│ strict YAML/JSON DTOs          │  │ bounded Linux reads  │
-└───────────────┬────────────────┘  └──────┬───────────────┘
-                │ validated values         │ stable bytes
-┌───────────────▼──────────────────────────▼───────────────┐
+└──────────────┬────────────────┬────────────────┬─────────┘
+               │                │                │
+┌──────────────▼───────┐ ┌──────▼────────┐ ┌────▼──────────────┐
+│ invokrum-schema      │ │ invokrum-fs   │ │ invokrum-integrity│
+│ strict YAML / JSON   │ │ stable bytes  │ │ locks / verification│
+└──────────────┬───────┘ └──────┬────────┘ └────┬──────────────┘
+               └────────────────┴───────────────┘
+                                │
+┌───────────────────────────────▼──────────────────────────┐
 │ invokrum-core                                             │
 │ model · invariants · composition port/use case · manifest│
 └────────────────────────────┬─────────────────────────────┘
@@ -100,11 +103,12 @@ The mechanism-versus-policy boundary is documented in [ADR-0001](docs/architectu
 └──────────────────────────────────────────────────────────┘
 ```
 
-The workspace uses durable boundaries rather than placing serialization or filesystem access inside application policy:
+The workspace uses durable boundaries rather than placing serialization, hashing, or filesystem access inside application policy:
 
 - `invokrum-core` owns parsing-neutral domain types, the source port, deterministic resolution, compatibility evaluation, limits, ordered segments, and the in-memory-testable composition use case;
 - `invokrum-schema` translates strict YAML/JSON documents into the domain model;
 - `invokrum-fs` implements the source port with a fail-closed Linux local-filesystem policy;
+- `invokrum-integrity` consumes exact composition bytes and produces canonical SHA-256 lock material and drift reports;
 - `invokrum-cli` owns delivery concerns and will wire concrete adapters.
 
 ## V1 pack format
@@ -144,6 +148,18 @@ profiles:
 
 Unknown fields and unsupported schema families fail closed. Paths use a portable forward-slash grammar. See [docs/schema-v1.md](docs/schema-v1.md) and the [machine-readable JSON Schema](schemas/invokrum-pack-v1.schema.json).
 
+## Integrity baseline
+
+The implemented integrity adapter defines:
+
+- `invokrum.lock/v1`;
+- `invokrum.canonical-json/v1`;
+- lowercase SHA-256 digests for pack metadata, selected profiles, ordered source bytes, engine inputs, normalized output, and the manifest;
+- strict lockfile decoding and internal consistency checks;
+- deterministic drift categories for configuration, overlay identity, overlay content, and rendered output.
+
+The manifest digest detects corruption; it is not a publisher signature. See [docs/integrity-and-lockfiles.md](docs/integrity-and-lockfiles.md).
+
 ## Proposed CLI workflow
 
 The intended CLI surface remains under implementation:
@@ -166,7 +182,7 @@ Invokrum originates from the prompt-overlay composition model developed inside [
 | Generic schemas and domain types | Anthesis overlay taxonomy |
 | Deterministic ordering and resolution | Core invariant and STOP semantics |
 | Cardinality and compatibility validation | Governance and approval policy |
-| Rendering, hashing, and lockfiles | Session, evidence, and audit binding |
+| Canonical manifests, hashing, and lockfiles | Session, evidence, and audit binding |
 | Adapter contracts | Anthesis runtime integration |
 
 Anthesis is expected to become an early real-world consumer and compatibility test, not a special case embedded in the engine.
@@ -177,7 +193,7 @@ The active backlog is tracked in [GitHub Issues](https://github.com/hackelia-mic
 
 ## Security posture
 
-Prompt overlays are configuration and potentially untrusted content. Invokrum assumes hostile or malformed inputs, but structural validation is not semantic approval and exact-byte integrity is not authorization.
+Prompt overlays are configuration and potentially untrusted content. Invokrum assumes hostile or malformed inputs, but structural validation is not semantic approval, exact-byte integrity is not publisher authentication, and verification is not authorization.
 
 The accepted [threat model and trust boundaries](docs/security/threat-model.md) identify assets, actors, abuse cases, delegated host responsibilities, and the current status of each control. Only controls marked **Implemented** and backed by executable validation should be treated as present. Controls marked **Partial** or **Planned** are not production guarantees.
 
