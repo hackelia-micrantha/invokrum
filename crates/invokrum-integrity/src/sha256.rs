@@ -142,21 +142,18 @@ fn process_block(state: &mut [u32; 8], block: &[u8]) {
         mut working_h,
     ] = *state;
     for index in 0..64 {
-        let sum1 = working_e.rotate_right(6)
-            ^ working_e.rotate_right(11)
-            ^ working_e.rotate_right(25);
+        let sum1 =
+            working_e.rotate_right(6) ^ working_e.rotate_right(11) ^ working_e.rotate_right(25);
         let choose = (working_e & working_f) ^ ((!working_e) & working_g);
         let temporary1 = working_h
             .wrapping_add(sum1)
             .wrapping_add(choose)
             .wrapping_add(ROUND_CONSTANTS[index])
             .wrapping_add(schedule[index]);
-        let sum0 = working_a.rotate_right(2)
-            ^ working_a.rotate_right(13)
-            ^ working_a.rotate_right(22);
-        let majority = (working_a & working_b)
-            ^ (working_a & working_c)
-            ^ (working_b & working_c);
+        let sum0 =
+            working_a.rotate_right(2) ^ working_a.rotate_right(13) ^ working_a.rotate_right(22);
+        let majority =
+            (working_a & working_b) ^ (working_a & working_c) ^ (working_b & working_c);
         let temporary2 = sum0.wrapping_add(majority);
 
         working_h = working_g;
