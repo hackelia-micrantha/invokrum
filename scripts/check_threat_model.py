@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 import re
 import sys
@@ -14,6 +16,7 @@ REQUIRED_HEADINGS = {
     "## Security objectives",
     "## Assets",
     "## Actors",
+    "## Entry points",
     "## Trust boundaries",
     "## Assumptions",
     "## Threat and control status matrix",
@@ -39,44 +42,92 @@ ALLOWED_STATUSES = {
     "Delegated",
     "Out of scope",
 }
-EXPECTED_THREATS = {f"T{number:02d}" for number in range(1, 15)}
-ROW_PATTERN = re.compile(
-    r"^\| (T\d{2}) \| .*? \| (Implemented|Partial|Planned|Delegated|Out of scope) \|",
-    re.MULTILINE,
-)
+EXPECTED_THREATS = {f"T{number:02d}" for number in range(1, 18)}
+THREAT_ROW_START = re.compile(r"^\|\s*T\d{2}\s*\|")
 
 
-def main() -> int:
+@dataclass(frozen=True)
+class ThreatRow:
+    threat_id: str
+    status: str
+    control: str
+    owner: str
+    line_number: int
+
+
+def parse_threat_rows(text: str) -> tuple[list[ThreatRow], list[str]]:
+    """Parse all threat-looking table rows without hiding invalid statuses."""
+    rows: list[ThreatRow] = []
     errors: list[str] = []
 
-    if not THREAT_MODEL.is_file():
-        print("threat-model check failed: missing docs/security/threat-model.md", file=sys.stderr)
-        return 1
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if not THREAT_ROW_START.match(line):
+            continue
 
-    text = THREAT_MODEL.read_text(encoding="utf-8")
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 5:
+            errors.append(
+                f"threat row on line {line_number} must contain exactly five columns"
+            )
+            continue
 
-    for heading in sorted(REQUIRED_HEADINGS):
-        if heading not in text:
-            errors.append(f"threat model is missing required heading: {heading}")
+        threat_id, _description, status, control, owner = cells
+        rows.append(
+            ThreatRow(
+                threat_id=threat_id,
+                status=status,
+                control=control,
+                owner=owner,
+                line_number=line_number,
+            )
+        )
 
-    rows = ROW_PATTERN.findall(text)
-    ids = [threat_id for threat_id, _ in rows]
-    statuses = {status for _, status in rows}
+    return rows, errors
 
-    duplicates = sorted({threat_id for threat_id in ids if ids.count(threat_id) > 1})
+
+def validate_threat_rows(
+    rows: list[ThreatRow], expected_threats: set[str]
+) -> list[str]:
+    """Validate identifiers, statuses, evidence cells, and table completeness."""
+    errors: list[str] = []
+    counts = Counter(row.threat_id for row in rows)
+
+    duplicates = sorted(threat_id for threat_id, count in counts.items() if count > 1)
     if duplicates:
         errors.append(f"duplicate threat IDs: {', '.join(duplicates)}")
 
-    missing = sorted(EXPECTED_THREATS - set(ids))
-    unexpected = sorted(set(ids) - EXPECTED_THREATS)
+    row_ids = set(counts)
+    missing = sorted(expected_threats - row_ids)
+    unexpected = sorted(row_ids - expected_threats)
     if missing:
         errors.append(f"missing threat IDs: {', '.join(missing)}")
     if unexpected:
         errors.append(f"unexpected threat IDs: {', '.join(unexpected)}")
 
-    invalid_statuses = sorted(statuses - ALLOWED_STATUSES)
-    if invalid_statuses:
-        errors.append(f"invalid threat statuses: {', '.join(invalid_statuses)}")
+    for row in rows:
+        if row.status not in ALLOWED_STATUSES:
+            errors.append(
+                f"invalid status `{row.status}` for {row.threat_id} on line {row.line_number}"
+            )
+        if not row.control:
+            errors.append(f"{row.threat_id} has an empty control cell")
+        if not row.owner:
+            errors.append(f"{row.threat_id} has an empty owner/follow-up cell")
+
+    return errors
+
+
+def validate_document(text: str) -> list[str]:
+    """Validate the threat-model document contract."""
+    errors: list[str] = []
+
+    for heading in sorted(REQUIRED_HEADINGS):
+        if heading not in text:
+            errors.append(f"threat model is missing required heading: {heading}")
+
+    rows, parse_errors = parse_threat_rows(text)
+    errors.extend(parse_errors)
+    errors.extend(validate_threat_rows(rows, EXPECTED_THREATS))
 
     for path, required_link in REQUIRED_LINKS.items():
         if not path.is_file():
@@ -84,9 +135,21 @@ def main() -> int:
             continue
         linked_text = path.read_text(encoding="utf-8")
         if required_link not in linked_text:
-            errors.append(
-                f"{path.relative_to(ROOT)} must link to {required_link}"
-            )
+            errors.append(f"{path.relative_to(ROOT)} must link to {required_link}")
+
+    return errors
+
+
+def main() -> int:
+    if not THREAT_MODEL.is_file():
+        print(
+            "threat-model check failed: missing docs/security/threat-model.md",
+            file=sys.stderr,
+        )
+        return 1
+
+    text = THREAT_MODEL.read_text(encoding="utf-8")
+    errors = validate_document(text)
 
     if errors:
         print("threat-model check failed:", file=sys.stderr)
@@ -94,9 +157,10 @@ def main() -> int:
             print(f"- {error}", file=sys.stderr)
         return 1
 
+    rows, _ = parse_threat_rows(text)
     print(
         "threat-model check passed "
-        f"({len(ids)} threats, {len(REQUIRED_LINKS)} required links)"
+        f"({len(rows)} threats, {len(REQUIRED_LINKS)} required links)"
     )
     return 0
 
