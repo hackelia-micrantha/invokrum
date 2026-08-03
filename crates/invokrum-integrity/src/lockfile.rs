@@ -1,6 +1,6 @@
 use std::fmt;
 
-use invokrum_core::{Composition, OverlayPack};
+use invokrum_core::{Composition, Identifier, OverlayPack, PackRelativePath};
 use serde::{Deserialize, Serialize};
 
 use crate::canonical::{canonical_json, pack_bytes, profile_bytes};
@@ -8,6 +8,8 @@ use crate::canonical::{canonical_json, pack_bytes, profile_bytes};
 pub const LOCKFILE_FORMAT: &str = "invokrum.lock/v1";
 pub const CANONICALIZATION_FORMAT: &str = "invokrum.canonical-json/v1";
 pub const SHA256_ALGORITHM: &str = "sha256";
+pub const MAX_LOCKFILE_BYTES: usize = 1_048_576;
+pub const MAX_LOCKED_OVERLAYS: usize = 256;
 
 /// Injected content-digest capability used by lock generation and verification.
 pub trait Digester {
@@ -123,6 +125,10 @@ pub enum IntegrityError {
     InconsistentComposition,
     Encode,
     Decode,
+    LockfileTooLarge,
+    TooManyOverlays,
+    NonCanonicalEncoding,
+    InvalidIdentity,
     UnsupportedFormat,
     UnsupportedCanonicalization,
     UnsupportedDigestAlgorithm,
@@ -137,6 +143,10 @@ impl fmt::Display for IntegrityError {
             Self::InconsistentComposition => "composition does not describe the supplied pack",
             Self::Encode => "failed to encode canonical integrity data",
             Self::Decode => "failed to decode lockfile",
+            Self::LockfileTooLarge => "lockfile exceeds the v1 byte limit",
+            Self::TooManyOverlays => "lockfile exceeds the v1 overlay limit",
+            Self::NonCanonicalEncoding => "lockfile is not canonical v1 JSON",
+            Self::InvalidIdentity => "lockfile contains an invalid identifier or source path",
             Self::UnsupportedFormat => "unsupported lockfile format",
             Self::UnsupportedCanonicalization => "unsupported canonicalization format",
             Self::UnsupportedDigestAlgorithm => "unsupported digest algorithm",
@@ -227,21 +237,36 @@ pub fn build_lockfile(
 /// # Errors
 ///
 /// Returns [`IntegrityError`] when the format is unsupported, an integrity field
-/// is invalid, or JSON serialization fails.
+/// is invalid, a v1 resource limit is exceeded, or JSON serialization fails.
 pub fn encode_lockfile(lockfile: &Lockfile) -> Result<Vec<u8>, IntegrityError> {
     validate_lockfile(lockfile, &Sha256Digester)?;
-    canonical_json(lockfile).map_err(|_| IntegrityError::Encode)
+    let bytes = canonical_json(lockfile).map_err(|_| IntegrityError::Encode)?;
+    if bytes.len() > MAX_LOCKFILE_BYTES {
+        return Err(IntegrityError::LockfileTooLarge);
+    }
+    Ok(bytes)
 }
 
-/// Decodes and validates canonical v1 lockfile JSON.
+/// Decodes and validates exact canonical v1 lockfile JSON.
+///
+/// Semantically equivalent JSON with whitespace, reordered fields, duplicate
+/// keys, or alternate string escapes is rejected rather than normalized.
 ///
 /// # Errors
 ///
-/// Returns [`IntegrityError`] for malformed input, unsupported versions or
-/// algorithms, invalid digest text, or internally inconsistent lock material.
+/// Returns [`IntegrityError`] for oversized or malformed input, noncanonical
+/// encoding, unsupported versions or algorithms, invalid identities or digest
+/// text, excessive overlays, or internally inconsistent lock material.
 pub fn decode_lockfile(bytes: &[u8]) -> Result<Lockfile, IntegrityError> {
+    if bytes.len() > MAX_LOCKFILE_BYTES {
+        return Err(IntegrityError::LockfileTooLarge);
+    }
     let lockfile: Lockfile = serde_json::from_slice(bytes).map_err(|_| IntegrityError::Decode)?;
     validate_lockfile(&lockfile, &Sha256Digester)?;
+    let canonical = canonical_json(&lockfile).map_err(|_| IntegrityError::Encode)?;
+    if canonical != bytes {
+        return Err(IntegrityError::NonCanonicalEncoding);
+    }
     Ok(lockfile)
 }
 
@@ -327,6 +352,10 @@ fn validate_lockfile(lockfile: &Lockfile, digester: &impl Digester) -> Result<()
     if lockfile.digest_algorithm != SHA256_ALGORITHM || digester.algorithm() != SHA256_ALGORITHM {
         return Err(IntegrityError::UnsupportedDigestAlgorithm);
     }
+    if lockfile.manifest.overlays.len() > MAX_LOCKED_OVERLAYS {
+        return Err(IntegrityError::TooManyOverlays);
+    }
+    validate_identities(lockfile)?;
     validate_digests(lockfile)?;
 
     let expected_inputs = digest_engine_inputs(
@@ -344,6 +373,18 @@ fn validate_lockfile(lockfile: &Lockfile, digester: &impl Digester) -> Result<()
     );
     if expected_manifest != lockfile.manifest_digest {
         return Err(IntegrityError::LockfileIntegrityMismatch);
+    }
+    Ok(())
+}
+
+fn validate_identities(lockfile: &Lockfile) -> Result<(), IntegrityError> {
+    Identifier::parse(&lockfile.manifest.pack.id).map_err(|_| IntegrityError::InvalidIdentity)?;
+    Identifier::parse(&lockfile.manifest.profile.id)
+        .map_err(|_| IntegrityError::InvalidIdentity)?;
+    for overlay in &lockfile.manifest.overlays {
+        Identifier::parse(&overlay.class).map_err(|_| IntegrityError::InvalidIdentity)?;
+        Identifier::parse(&overlay.id).map_err(|_| IntegrityError::InvalidIdentity)?;
+        PackRelativePath::parse(&overlay.source).map_err(|_| IntegrityError::InvalidIdentity)?;
     }
     Ok(())
 }
