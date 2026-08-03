@@ -5,6 +5,7 @@
 
 #![forbid(unsafe_code)]
 
+mod limits;
 mod strict;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -18,6 +19,12 @@ use invokrum_core::{
 use serde::{Deserialize, Serialize};
 use strict::{PreflightError, preflight_json, preflight_yaml};
 
+pub use limits::{
+    DEFAULT_MAX_CLASSES, DEFAULT_MAX_DOCUMENT_BYTES, DEFAULT_MAX_INCOMPATIBILITIES,
+    DEFAULT_MAX_NESTING_DEPTH, DEFAULT_MAX_OVERLAYS, DEFAULT_MAX_PROFILES,
+    DEFAULT_MAX_SELECTIONS, DEFAULT_MAX_VARIABLES, DeclarationKind, DeclarationLimits,
+    SchemaLimits,
+};
 pub use strict::YamlFeature;
 
 const MAX_ERROR_MESSAGE_CHARS: usize = 512;
@@ -86,19 +93,35 @@ enum SensitivityDocument {
     Secret,
 }
 
-/// Parse a strict v1 JSON pack document into the validated domain model.
-///
-/// A recursive structural preflight rejects duplicate object keys at any depth
-/// before schema-family negotiation. This keeps future-version errors causal
-/// without allowing ambiguous future fields to be silently overwritten.
+/// Parse a strict v1 JSON pack document with the default resource limits.
 ///
 /// # Errors
 ///
-/// Returns [`SchemaError`] when JSON decoding fails, mapping keys are repeated,
-/// unknown fields are present, the schema family is unsupported, duplicate list
-/// values are present, or domain invariants are violated.
+/// Returns [`SchemaError`] when a resource limit is exceeded, JSON decoding
+/// fails, mapping keys are repeated, unknown fields are present, the schema
+/// family is unsupported, duplicate list values are present, or domain
+/// invariants are violated.
 pub fn parse_json(input: &str) -> Result<OverlayPack, SchemaError> {
-    preflight_json(input)?;
+    parse_json_with_limits(input, SchemaLimits::default())
+}
+
+/// Parse a strict v1 JSON pack document with explicit immutable limits.
+///
+/// The byte limit is checked before deserialization. Recursive structural
+/// preflight rejects duplicate object keys and excessive container depth before
+/// schema-family negotiation. Declaration limits are checked after DTO decoding
+/// and before domain aggregate construction.
+///
+/// # Errors
+///
+/// Returns [`SchemaError`] for resource-limit, decoding, schema, list, or domain
+/// failures.
+pub fn parse_json_with_limits(
+    input: &str,
+    limits: SchemaLimits,
+) -> Result<OverlayPack, SchemaError> {
+    ensure_document_size(input, limits)?;
+    preflight_json(input, limits.nesting_depth())?;
 
     let envelope: SchemaEnvelope = serde_json::from_str(input)
         .map_err(|error| SchemaError::decode("json", &error.to_string()))?;
@@ -106,23 +129,41 @@ pub fn parse_json(input: &str) -> Result<OverlayPack, SchemaError> {
 
     let document: PackDocument = serde_json::from_str(input)
         .map_err(|error| SchemaError::decode("json", &error.to_string()))?;
+    document.ensure_declaration_limits(limits.declarations())?;
     document.try_into()
 }
 
-/// Parse a strict v1 YAML pack document into the validated domain model.
-///
-/// A recursive structural preflight rejects duplicate mapping keys at any depth,
-/// multiple documents, and YAML features outside the documented v1 subset before
-/// schema-family negotiation or DTO mapping.
+/// Parse a strict v1 YAML pack document with the default resource limits.
 ///
 /// # Errors
 ///
-/// Returns [`SchemaError`] when YAML decoding fails, mapping keys are repeated,
-/// unsupported YAML features are used, multiple documents are supplied, unknown
-/// fields are present, the schema family is unsupported, duplicate list values
-/// are present, or domain invariants are violated.
+/// Returns [`SchemaError`] when a resource limit is exceeded, YAML decoding
+/// fails, mapping keys are repeated, unsupported YAML features or multiple
+/// documents are present, unknown fields are present, the schema family is
+/// unsupported, duplicate list values are present, or domain invariants are
+/// violated.
 pub fn parse_yaml(input: &str) -> Result<OverlayPack, SchemaError> {
-    preflight_yaml(input)?;
+    parse_yaml_with_limits(input, SchemaLimits::default())
+}
+
+/// Parse a strict v1 YAML pack document with explicit immutable limits.
+///
+/// The byte limit is checked before scanning or deserialization. Recursive
+/// structural preflight rejects duplicate mapping keys, excessive container
+/// depth, multiple documents, and YAML features outside the v1 subset before
+/// schema-family negotiation. Declaration limits are checked before domain
+/// aggregate construction.
+///
+/// # Errors
+///
+/// Returns [`SchemaError`] for resource-limit, decoding, YAML-subset, schema,
+/// list, or domain failures.
+pub fn parse_yaml_with_limits(
+    input: &str,
+    limits: SchemaLimits,
+) -> Result<OverlayPack, SchemaError> {
+    ensure_document_size(input, limits)?;
+    preflight_yaml(input, limits.nesting_depth())?;
 
     let envelope: SchemaEnvelope = serde_yaml_ng::from_str(input)
         .map_err(|error| SchemaError::decode("yaml", &error.to_string()))?;
@@ -130,6 +171,7 @@ pub fn parse_yaml(input: &str) -> Result<OverlayPack, SchemaError> {
 
     let document: PackDocument = serde_yaml_ng::from_str(input)
         .map_err(|error| SchemaError::decode("yaml", &error.to_string()))?;
+    document.ensure_declaration_limits(limits.declarations())?;
     document.try_into()
 }
 
@@ -145,6 +187,19 @@ pub fn to_normalized_json(pack: &OverlayPack) -> Result<String, SchemaError> {
     serde_json::to_string_pretty(&PackDocument::from(pack)).map_err(|error| {
         SchemaError::Encode(bounded_text(&error.to_string(), MAX_ERROR_MESSAGE_CHARS))
     })
+}
+
+fn ensure_document_size(input: &str, limits: SchemaLimits) -> Result<(), SchemaError> {
+    let actual_bytes = input.len();
+    let maximum_bytes = limits.document_bytes();
+    if actual_bytes > maximum_bytes {
+        Err(SchemaError::DocumentTooLarge {
+            maximum_bytes,
+            actual_bytes,
+        })
+    } else {
+        Ok(())
+    }
 }
 
 fn ensure_supported_schema(schema: &str) -> Result<(), SchemaError> {
@@ -182,6 +237,74 @@ fn parse_identifier_set(
         }
     }
     Ok(identifiers)
+}
+
+fn ensure_count(
+    kind: DeclarationKind,
+    actual: usize,
+    limits: DeclarationLimits,
+) -> Result<(), SchemaError> {
+    let maximum = limits.maximum(kind);
+    if actual > maximum {
+        Err(SchemaError::TooManyDeclarations {
+            kind,
+            maximum,
+            actual,
+        })
+    } else {
+        Ok(())
+    }
+}
+
+fn ensure_accumulated_count(
+    kind: DeclarationKind,
+    counts: impl IntoIterator<Item = usize>,
+    limits: DeclarationLimits,
+) -> Result<(), SchemaError> {
+    let maximum = limits.maximum(kind);
+    let mut actual = 0usize;
+    for count in counts {
+        actual = actual.checked_add(count).ok_or(SchemaError::TooManyDeclarations {
+            kind,
+            maximum,
+            actual: usize::MAX,
+        })?;
+        if actual > maximum {
+            return Err(SchemaError::TooManyDeclarations {
+                kind,
+                maximum,
+                actual,
+            });
+        }
+    }
+    Ok(())
+}
+
+impl PackDocument {
+    fn ensure_declaration_limits(&self, limits: DeclarationLimits) -> Result<(), SchemaError> {
+        ensure_count(DeclarationKind::Class, self.classes.len(), limits)?;
+        ensure_count(DeclarationKind::Overlay, self.overlays.len(), limits)?;
+        ensure_count(DeclarationKind::Profile, self.profiles.len(), limits)?;
+        ensure_count(DeclarationKind::Variable, self.variables.len(), limits)?;
+
+        ensure_accumulated_count(
+            DeclarationKind::Selection,
+            self.profiles.iter().flat_map(|profile| {
+                profile
+                    .selections
+                    .values()
+                    .flat_map(|overlays| [1usize, overlays.len()])
+            }),
+            limits,
+        )?;
+        ensure_accumulated_count(
+            DeclarationKind::Incompatibility,
+            self.overlays
+                .iter()
+                .map(|overlay| overlay.incompatible_with.len()),
+            limits,
+        )
+    }
 }
 
 impl TryFrom<PackDocument> for OverlayPack {
@@ -332,6 +455,18 @@ impl From<&OverlayPack> for PackDocument {
 /// A schema-boundary failure while decoding, validating, or encoding a pack.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SchemaError {
+    DocumentTooLarge {
+        maximum_bytes: usize,
+        actual_bytes: usize,
+    },
+    NestingTooDeep {
+        maximum_depth: usize,
+    },
+    TooManyDeclarations {
+        kind: DeclarationKind,
+        maximum: usize,
+        actual: usize,
+    },
     Decode {
         format: &'static str,
         message: String,
@@ -368,6 +503,9 @@ impl From<PreflightError> for SchemaError {
                 Self::UnsupportedYamlFeature(feature)
             }
             PreflightError::MultipleYamlDocuments => Self::MultipleYamlDocuments,
+            PreflightError::NestingTooDeep { maximum_depth } => {
+                Self::NestingTooDeep { maximum_depth }
+            }
         }
     }
 }
@@ -381,6 +519,25 @@ impl From<DomainError> for SchemaError {
 impl fmt::Display for SchemaError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::DocumentTooLarge {
+                maximum_bytes,
+                actual_bytes,
+            } => write!(
+                formatter,
+                "schema document is {actual_bytes} bytes; maximum is {maximum_bytes} bytes"
+            ),
+            Self::NestingTooDeep { maximum_depth } => write!(
+                formatter,
+                "schema document exceeds maximum container depth {maximum_depth}"
+            ),
+            Self::TooManyDeclarations {
+                kind,
+                maximum,
+                actual,
+            } => write!(
+                formatter,
+                "schema document has {actual} {kind} declarations; maximum is {maximum}"
+            ),
             Self::Decode { format, message } => write!(formatter, "invalid {format}: {message}"),
             Self::DuplicateMappingKey { format } => {
                 write!(formatter, "duplicate mapping key in {format} input")
