@@ -37,6 +37,7 @@ The goal is not another prompt-template manager. Invokrum is intended to provide
 - [Purpose and scope](docs/purpose.md)
 - [Use cases](docs/use-cases.md)
 - [Architecture](docs/architecture/README.md)
+- [Threat model and trust boundaries](docs/security/threat-model.md)
 - [V1 schema contract](docs/schema-v1.md)
 - [Configuration](docs/configuration.md)
 - [Usage](docs/usage.md)
@@ -174,9 +175,11 @@ The active backlog is tracked in [GitHub Issues](https://github.com/hackelia-mic
 
 ## Security posture
 
-Prompt overlays are configuration and potentially untrusted content. Invokrum assumes hostile or malformed inputs and plans controls for traversal, symlink escape, malicious packs, secret persistence, canonicalization confusion, denial of service, and unsafe host adapters.
+Prompt overlays are configuration and potentially untrusted content. Invokrum assumes hostile or malformed inputs, but structural validation is not semantic approval and exact-byte integrity is not authorization.
 
-No security guarantee should be inferred before the relevant controls are implemented and tested. See [SECURITY.md](SECURITY.md) and threat-model issue [#9](https://github.com/hackelia-micrantha/invokrum/issues/9).
+The accepted [threat model and trust boundaries](docs/security/threat-model.md) identify assets, actors, abuse cases, delegated host responsibilities, and the current status of each control. Only controls marked **Implemented** and backed by executable validation should be treated as present. Controls marked **Partial** or **Planned** are not production guarantees.
+
+See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
 ## Contributing
 
