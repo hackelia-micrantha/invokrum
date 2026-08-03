@@ -73,7 +73,7 @@ jobs:
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Install pinned cargo-deny
-        run: cargo install cargo-deny --version 0.19.7 --locked
+        run: cargo install cargo-deny --version 0.18.3 --locked
       - name: Audit advisories, licenses, bans, and sources
         run: cargo deny check advisories bans licenses sources
       - name: Install checksum-verified Gitleaks
