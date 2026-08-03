@@ -8,3 +8,14 @@
 
 /// Current public schema family understood by the initial architecture.
 pub const SCHEMA_FAMILY: &str = "invokrum.dev/v1";
+
+#[cfg(test)]
+mod tests {
+    use super::SCHEMA_FAMILY;
+
+    #[test]
+    fn schema_family_is_stable_and_versioned() {
+        assert_eq!(SCHEMA_FAMILY, "invokrum.dev/v1");
+        assert!(SCHEMA_FAMILY.ends_with("/v1"));
+    }
+}
