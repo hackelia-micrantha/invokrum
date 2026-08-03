@@ -22,8 +22,11 @@ Preferred placement:
 
 ```text
 crates/<crate>/src/<module>.rs        inline focused unit tests
-crates/<crate>/tests/unit/            larger black-box unit suites when needed
+crates/<crate>/tests/unit.rs          black-box unit-test harness
+crates/<crate>/tests/unit/*.rs        modules included by unit.rs
 ```
+
+Cargo discovers top-level files directly under a crate's `tests/` directory. Nested suites therefore require an explicit top-level harness such as `tests/unit.rs`.
 
 ## Integration tests
 
@@ -41,12 +44,14 @@ Examples:
 Preferred placement:
 
 ```text
-crates/invokrum-core/tests/integration/
-crates/invokrum-cli/tests/integration/
+crates/invokrum-core/tests/integration.rs
+crates/invokrum-core/tests/integration/*.rs
+crates/invokrum-cli/tests/integration.rs
+crates/invokrum-cli/tests/integration/*.rs
 tests/fixtures/
 ```
 
-Use temporary directories and repository-owned fixtures. Tests must not read or mutate the caller's home directory.
+Each nested directory is included by its corresponding top-level Cargo test harness. Use temporary directories and repository-owned fixtures. Tests must not read or mutate the caller's home directory.
 
 ## End-to-end tests
 
@@ -66,9 +71,12 @@ Each supported workflow should eventually cover:
 Preferred placement:
 
 ```text
-tests/e2e/
+crates/invokrum-cli/tests/e2e.rs
+crates/invokrum-cli/tests/e2e/*.rs
 tests/fixtures/e2e/
 ```
+
+The CLI crate owns the executable contract, so its top-level `tests/e2e.rs` harness should invoke the Cargo-built binary. Workspace-root fixtures may be shared, but a virtual workspace root does not itself provide an automatically discovered Cargo test target.
 
 E2E tests should use the binary path supplied by Cargo test tooling and should not assume a globally installed executable.
 
