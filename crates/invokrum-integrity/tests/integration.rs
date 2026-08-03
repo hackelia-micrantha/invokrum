@@ -156,9 +156,13 @@ fn equivalent_declaration_order_produces_identical_lock_bytes() {
 
 #[test]
 fn lock_construction_returns_only_encodable_v1_material() {
-    let (pack, composition, _) = lockfile();
+    let (current_pack, current_composition, _) = lockfile();
     assert_eq!(
-        build_lockfile(&pack, &composition, &UnsupportedDigester),
+        build_lockfile(
+            &current_pack,
+            &current_composition,
+            &UnsupportedDigester,
+        ),
         Err(IntegrityError::UnsupportedDigestAlgorithm)
     );
 
@@ -166,11 +170,7 @@ fn lock_construction_returns_only_encodable_v1_material() {
     oversized_pack.schema_family = "x".repeat(MAX_LOCKFILE_BYTES);
     let oversized_composition = composition(&oversized_pack, &sources(b"review"));
     assert_eq!(
-        build_lockfile(
-            &oversized_pack,
-            &oversized_composition,
-            &Sha256Digester,
-        ),
+        build_lockfile(&oversized_pack, &oversized_composition, &Sha256Digester),
         Err(IntegrityError::LockfileTooLarge)
     );
 }
