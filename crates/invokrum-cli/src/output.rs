@@ -110,7 +110,7 @@ fn write_platform(path: &Path, bytes: &[u8], force: bool) -> Result<(), OutputEr
     File::open(&canonical_parent)
         .and_then(|directory| directory.sync_all())
         .map_err(|_| OutputError::Io)?;
-    Ok(())
+    return Ok(());
 
     fn reject_parent_links(parent: &Path) -> Result<(), OutputError> {
         let mut current = if parent.is_absolute() {
