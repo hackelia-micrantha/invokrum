@@ -111,6 +111,33 @@ fn documents_at_the_exact_byte_limit_remain_valid() {
 }
 
 #[test]
+fn documents_one_byte_over_the_limit_are_rejected() {
+    let json_maximum = MINIMAL_JSON.len() - 1;
+    let yaml_maximum = MINIMAL_YAML.len() - 1;
+
+    assert_eq!(
+        parse_json_with_limits(
+            MINIMAL_JSON,
+            limits(json_maximum, 32, DeclarationLimits::default()),
+        ),
+        Err(SchemaError::DocumentTooLarge {
+            maximum_bytes: json_maximum,
+            actual_bytes: MINIMAL_JSON.len(),
+        })
+    );
+    assert_eq!(
+        parse_yaml_with_limits(
+            MINIMAL_YAML,
+            limits(yaml_maximum, 32, DeclarationLimits::default()),
+        ),
+        Err(SchemaError::DocumentTooLarge {
+            maximum_bytes: yaml_maximum,
+            actual_bytes: MINIMAL_YAML.len(),
+        })
+    );
+}
+
+#[test]
 fn structural_depth_is_bounded_before_schema_negotiation() {
     let configured = limits(1_024, 2, DeclarationLimits::default());
     let deep_json = r#"{"schema":"invokrum.dev/v2","future":[[[]]]}"#;
@@ -144,6 +171,22 @@ fn declarations_at_every_exact_limit_remain_valid() {
         .expect("JSON at exact declaration limits should be accepted");
     parse_yaml_with_limits(DECLARATION_YAML, configured)
         .expect("YAML at exact declaration limits should be accepted");
+}
+
+#[test]
+fn declaration_limits_fail_before_domain_validation() {
+    let declarations = DeclarationLimits::new(0, 2, 1, 1, 2, 1);
+    let configured = limits(16_384, 16, declarations);
+    let invalid_json = DECLARATION_JSON.replace("\"id\":\"mode\"", "\"id\":\"invalid id\"");
+    let invalid_yaml = DECLARATION_YAML.replace("id: mode", "id: invalid id");
+    let expected = Err(SchemaError::TooManyDeclarations {
+        kind: DeclarationKind::Class,
+        maximum: 0,
+        actual: 1,
+    });
+
+    assert_eq!(parse_json_with_limits(&invalid_json, configured), expected);
+    assert_eq!(parse_yaml_with_limits(&invalid_yaml, configured), expected);
 }
 
 #[test]
