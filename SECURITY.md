@@ -22,14 +22,23 @@ Use GitHub's private vulnerability reporting feature for this repository when av
 
 Do not include live credentials, private keys, access tokens, or third-party confidential data.
 
-## Response expectations
+## Ownership and response
+
+The repository maintainer identified in [`.github/CODEOWNERS`](.github/CODEOWNERS) owns initial triage for:
+
+- dependency advisories and license policy;
+- secret-scanner findings;
+- parser, path, filesystem, integrity, and output-boundary reports;
+- CI and release workflow changes;
+- release-artifact provenance and checksum failures.
 
 Maintainers will attempt to:
 
 1. acknowledge a complete report;
 2. reproduce and classify the issue;
-3. coordinate remediation and disclosure;
-4. publish an advisory when affected released versions exist.
+3. identify affected commits and releases;
+4. coordinate remediation and disclosure;
+5. publish an advisory when affected released versions exist.
 
 Response timelines are best-effort while the project is pre-release.
 
@@ -44,7 +53,19 @@ Reports are especially useful for:
 - secret leakage through diagnostics or persisted manifests;
 - denial of service through malformed or pathological inputs;
 - host-adapter behavior that incorrectly preserves an Invokrum attestation after modifying output;
-- unsafe parsing or deserialization behavior.
+- unsafe parsing or deserialization behavior;
+- release artifact, checksum, SBOM, or attestation inconsistencies.
+
+## Gate exceptions
+
+Dependency, license, source, and secret-scanning gates fail closed by default. Exceptions must be narrow, reviewed, owned, and linked to an issue or private advisory. Each exception must record the finding identifier, affected package or scanner fingerprint, rationale, compensating controls, and review or expiry condition.
+
+- Rust advisory ignores belong in `deny.toml` with an adjacent issue reference.
+- License exceptions should be package-specific rather than broad allow-list expansion.
+- Secret-scan exceptions must use exact fingerprints or narrow rule/path matches; broad directory exclusions are not accepted.
+- GitHub Actions remain pinned to full immutable commit SHAs.
+
+The complete release and exception procedure is documented in [release and artifact verification](docs/release.md).
 
 ## Trust boundaries
 
@@ -61,4 +82,4 @@ Pack acquisition, signature policy, authorization, execution isolation, and audi
 
 ## Supported versions
 
-Until the first release, only the current default branch is considered for security fixes. A supported-version table will be added when versioned releases exist.
+Until the first published prerelease, only the current default branch is considered for security fixes. After prereleases begin, the current default branch and latest prerelease receive best-effort fixes; older prereleases are unsupported unless a security advisory states otherwise.
