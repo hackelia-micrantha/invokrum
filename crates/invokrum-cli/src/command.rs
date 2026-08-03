@@ -17,6 +17,7 @@ use crate::output;
 use crate::{CliError, Execution, escape_human};
 
 const MAX_PACK_BYTES: usize = 1_048_576;
+const CLI_JSON_FORMAT: &str = "invokrum.cli/v1";
 
 pub(crate) fn execute(command: Command) -> Result<Execution, CliError> {
     match command {
@@ -324,7 +325,22 @@ fn inspect_json(composition: &Composition) -> Result<Vec<u8>, CliError> {
 }
 
 fn json_line(value: &Value) -> Result<Vec<u8>, CliError> {
-    let mut bytes = serde_json::to_vec(value)
+    let mut envelope = value
+        .as_object()
+        .cloned()
+        .ok_or_else(|| CliError::internal("JSON output must be an object"))?;
+    if envelope
+        .insert(
+            "format".to_owned(),
+            Value::String(CLI_JSON_FORMAT.to_owned()),
+        )
+        .is_some()
+    {
+        return Err(CliError::internal(
+            "JSON output attempted to replace the format discriminator",
+        ));
+    }
+    let mut bytes = serde_json::to_vec(&Value::Object(envelope))
         .map_err(|_| CliError::internal("failed to encode JSON output"))?;
     bytes.push(b'\n');
     Ok(bytes)
