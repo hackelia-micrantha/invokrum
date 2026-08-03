@@ -217,7 +217,7 @@ fn verify_components(
             return Err(reject(source, SourceFailureKind::SymbolicLink));
         }
         if metadata.dev() != adapter.root_device {
-            return Err(reject(source, SourceFailureKind::MountBoundary));
+            return Err(reject(source, SourceFailureKind::DeviceBoundary));
         }
         if index + 1 < segment_count && !metadata.is_dir() {
             return Err(reject(source, SourceFailureKind::NotRegularFile));
@@ -241,7 +241,7 @@ fn verify_file_metadata(
         return Err(reject(source, SourceFailureKind::NotRegularFile));
     }
     if metadata.dev() != adapter.root_device {
-        return Err(reject(source, SourceFailureKind::MountBoundary));
+        return Err(reject(source, SourceFailureKind::DeviceBoundary));
     }
     if metadata.nlink() != 1 {
         return Err(reject(source, SourceFailureKind::HardLink));
