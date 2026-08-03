@@ -5,7 +5,7 @@
 Invokrum treats prompt composition as a deterministic build pipeline:
 
 ```text
-pack + profile + variables + overlay files
+pack + profile + overlay files
                     │
                     ▼
           parse and normalize
@@ -17,10 +17,13 @@ pack + profile + variables + overlay files
         resolve canonical ordering
                     │
                     ▼
-       render canonical prompt bytes
+       load stable bounded bytes
                     │
                     ▼
- manifest + digests + optional lockfile
+ normalized context + resolved manifest
+                    │
+                    ▼
+       digests + optional lockfile
 ```
 
 The engine validates declared structure and integrity. It does not execute agents, authorize actions, or decide whether prompt text is semantically trustworthy.
@@ -29,154 +32,91 @@ The engine validates declared structure and integrity. It does not execute agent
 
 ```text
 invokrum-cli / host adapters
-              ↓
-       invokrum-schema
-              ↓
-        invokrum-core
+          ↓             ↓
+ invokrum-schema   invokrum-fs
+          └──────┬──────┘
+                 ↓
+          invokrum-core
 ```
 
-Dependencies point inward. The core domain has no filesystem, process, network, environment, clock, randomness, or serialization dependency.
+Dependencies point inward. The core domain and application use case have no filesystem, process, network, environment, clock, randomness, or serialization dependency.
 
 ## Component boundaries
 
 ### `invokrum-core`
 
-Owns the policy-neutral domain and operations:
+Owns parsing-neutral domain values, deterministic aggregate validation, compatibility rules, the application-owned `OverlaySource` port, deterministic composition, resource limits, ordered exact-byte segments, normalized context bytes, resolved manifest values, and stable operation errors.
 
-- validated pack, class, overlay, profile, and variable types;
-- deterministic aggregate normalization;
-- structural and compatibility invariants;
-- deterministic profile resolution and rendering inputs;
-- canonical manifests and digest inputs;
-- stable domain error categories.
-
-It must not depend on Serde, YAML/JSON libraries, Anthesis, or any host runtime.
+It must not depend on Serde, YAML/JSON libraries, filesystem implementations, Anthesis, or a host runtime. Composition is tested with in-memory adapters.
 
 ### `invokrum-schema`
 
-Owns format-adapter concerns:
+Owns strict YAML/JSON decoding, schema-family negotiation, duplicate and unknown-field rejection, the accepted YAML subset, DTO translation, normalized JSON, and JSON Schema alignment. It depends inward on `invokrum-core` and performs no filesystem access.
 
-- strict YAML and JSON DTOs;
-- schema-family negotiation;
-- unknown-field rejection;
-- DTO-to-domain translation;
-- deterministic normalized JSON encoding;
-- machine-readable JSON Schema alignment.
+### `invokrum-fs`
 
-It depends on `invokrum-core`; the core must never depend on it. It performs no filesystem access and does not own domain policy.
+Implements `OverlaySource` for local Linux files. It establishes a canonical root, rejects links and filesystem-boundary crossings, verifies opened-file containment and identity, and returns bytes from one bounded stable read. It depends inward on `invokrum-core` and does not parse schemas or select overlays.
+
+The exact platform and namespace contract is documented in [deterministic composition and filesystem contract](../composition-and-filesystem.md).
 
 ### `invokrum-cli`
 
-Owns operator-facing concerns:
-
-- argument parsing;
-- human-readable diagnostics;
-- stable JSON envelopes;
-- exit-code mapping;
-- filesystem entrypoints;
-- stdout/stderr discipline;
-- composition-root wiring of concrete adapters.
-
-CLI presentation must not become the integration API for host adapters.
+Owns arguments, human diagnostics, JSON envelopes, exit codes, output policy, and composition-root wiring of schema, filesystem, and core behavior. CLI presentation is not the host integration API.
 
 ### Consumer packs
 
-Consumers own:
-
-- class names and authority order;
-- overlay content;
-- profiles and defaults;
-- compatibility policy;
-- domain-specific governance semantics.
+Consumers own class names and authority order, overlay content, profiles, compatibility declarations, and domain-specific governance semantics.
 
 ### Host adapters
 
-Hosts own:
-
-- pack acquisition and trust decisions;
-- authorization and approvals;
-- agent/model/tool invocation;
-- sandboxing and network policy;
-- evidence persistence;
-- binding the resolved digest to an execution.
-
-The security ownership and trust boundaries for these components are normative in the [threat model](../security/threat-model.md).
+Hosts own pack acquisition and trust, a stable filesystem namespace and protected root, authorization, runtime sandboxing, evidence persistence, and binding exact resolved bytes to execution.
 
 ## Core invariants
 
-1. Identical normalized inputs produce identical output and diagnostic ordering.
+1. Identical normalized inputs and source bytes produce identical output and diagnostic ordering.
 2. Ordering never depends on filesystem enumeration or hash-map iteration.
 3. Unsupported schema versions and unknown rule kinds fail closed.
 4. Composition performs no implicit network access.
 5. Paths use a platform-independent lexical grammar and resolve inside a canonical pack root or fail.
-6. Sensitive variables are not persisted by default.
-7. Human output and machine output remain separate contracts.
-8. A host cannot claim Invokrum verification after changing rendered bytes.
+6. Composition consumes exact bytes returned by one source read and never reopens paths.
+7. Overlay prose cannot redefine structural authority represented by ordered segments.
+8. Human and machine output remain separate contracts.
+9. A host cannot claim verification after changing represented bytes.
 
-Security invariants that are not yet implemented are requirements, not guarantees. Their current control status is tracked in the [threat and control matrix](../security/threat-model.md#threat-and-control-status-matrix).
+Unimplemented security invariants remain requirements rather than guarantees. Current status is tracked in the [threat matrix](../security/threat-model.md#threat-and-control-status-matrix).
 
 ## Data flow
 
 ```mermaid
 flowchart LR
   Pack[Overlay pack] --> Schema[Schema adapter]
-  Schema --> Domain[Validated domain aggregate]
-  Profile[Selected profile] --> Resolve[Resolve ordered overlays]
-  Vars[Variables] --> Resolve
-  Domain --> Resolve
-  Resolve --> Render[Render canonical context]
-  Render --> Manifest[Resolved manifest]
-  Render --> Digest[Content digest]
-  Manifest --> Lock[Optional lockfile]
+  Schema --> Domain[Validated aggregate]
+  Profile[Selected profile] --> Compose[Composition use case]
+  Domain --> Compose
+  Compose --> Port[OverlaySource port]
+  Port --> FS[Linux filesystem adapter]
+  FS -->|stable bounded bytes| Compose
+  Compose --> Segments[Ordered exact segments]
+  Compose --> Context[Normalized context]
+  Compose --> Manifest[Resolved manifest]
+  Context --> Digest[Future digest]
+  Manifest --> Lock[Future lockfile]
   Digest --> Host[Host adapter]
   Host --> Runtime[Agent or tool runtime]
 ```
 
 ## Error model
 
-Public errors should be categorized rather than exposing parser-library internals:
-
-- input or syntax error;
-- unsupported version;
-- invalid schema;
-- missing reference;
-- path-policy violation;
-- cardinality violation;
-- compatibility violation;
-- ambiguous resolution;
-- rendering failure;
-- verification mismatch;
-- internal invariant failure.
-
-Machine-readable errors should include stable codes, relevant paths, rule identifiers, and ordered diagnostics while avoiding secret values.
+Public errors use stable categories instead of parser-library or operating-system text. Structured errors may retain validated paths; human delivery output must escape attacker-controlled values or omit them. Application source diagnostics currently omit paths.
 
 ## Compatibility surfaces
 
-The following are compatibility-sensitive and require explicit versioning or release notes:
-
-- pack schema;
-- normalized manifest format;
-- lockfile format;
-- JSON CLI output;
-- exit codes;
-- canonicalization rules;
-- public Rust API;
-- adapter request and response envelopes.
-
-Human-readable CLI wording is not intended as a stable parsing contract.
+Compatibility-sensitive surfaces include the pack schema, normalized context framing, manifest and lockfile formats, JSON CLI output, exit codes, filesystem policy, public Rust API, and adapter envelopes.
 
 ## Security architecture
 
-The accepted [threat model and trust boundaries](../security/threat-model.md) define:
-
-- assets, actors, assumptions, and entry points;
-- acquisition, filesystem, serialization, domain, variable, and host/runtime boundaries;
-- abuse cases and required mitigations;
-- implemented, partial, planned, delegated, and out-of-scope controls;
-- responsibilities assigned to Invokrum, pack authors, operators, and hosts.
-
-Structural validation never implies semantic prompt safety. Exact-byte integrity never implies authorization or safe runtime behavior.
+The accepted [threat model and trust boundaries](../security/threat-model.md) define assets, actors, entry points, boundaries, abuse cases, control status, and responsibility ownership. Structural validation is not semantic prompt approval, and exact-byte integrity is not authorization.
 
 ## Decisions
 
-Architecture decisions are recorded in this directory. The foundational mechanism-versus-policy boundary is defined in [ADR-0001](ADR-0001-mechanism-policy-boundary.md). Clean Architecture, SOLID, dependency injection, and pattern constraints are defined in [clean-solid-and-dependency-injection.md](clean-solid-and-dependency-injection.md). Security claims and trust ownership are defined in the [threat model](../security/threat-model.md).
+Architecture decisions are recorded in this directory. [ADR-0001](ADR-0001-mechanism-policy-boundary.md) defines the mechanism/policy boundary. [Clean Architecture, SOLID, dependency injection, and patterns](clean-solid-and-dependency-injection.md) define implementation constraints.
