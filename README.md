@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-2f7d65.svg"></a>
-  <img alt="Project status: design and extraction" src="https://img.shields.io/badge/status-design%20%26%20extraction-355f7d.svg">
-  <img alt="Implementation language: Rust" src="https://img.shields.io/badge/planned-Rust-b7410e.svg">
+  <img alt="Project status: architecture" src="https://img.shields.io/badge/status-architecture-355f7d.svg">
+  <img alt="Implementation language: Rust" src="https://img.shields.io/badge/language-Rust-b7410e.svg">
 </p>
 
 > [!IMPORTANT]
@@ -19,7 +19,7 @@
 
 ## What is Invokrum?
 
-Invokrum is a proposed open-source engine for composing layered prompt context with explicit ordering, compatibility rules, validation, provenance, and reproducible output.
+Invokrum is an open-source engine for composing layered prompt context with explicit ordering, compatibility rules, validation, provenance, and reproducible output.
 
 It treats prompt context less like an ad hoc string and more like a build input:
 
@@ -31,6 +31,22 @@ It treats prompt context less like an ad hoc string and more like a build input:
 - a resolved manifest explains exactly what entered an agent context.
 
 The goal is not to create another prompt-template manager. Invokrum is intended to provide a small, auditable mechanism for systems where prompt composition affects authority, security, cost, quality, or execution behavior.
+
+## Documentation
+
+- [Purpose and scope](docs/purpose.md)
+- [Use cases](docs/use-cases.md)
+- [Architecture](docs/architecture/README.md)
+- [Configuration](docs/configuration.md)
+- [Usage](docs/usage.md)
+- [Development](docs/development.md)
+- [Roadmap](docs/roadmap.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
+- [Support](SUPPORT.md)
+- [Governance](GOVERNANCE.md)
+
+See the [documentation index](docs/README.md) for status conventions and the complete set of project references.
 
 ## Why the name?
 
@@ -52,7 +68,9 @@ The project mark reflects that origin: layered botanical forms surround a determ
 6. **Explainable resolution** — machine-readable manifests expose what was selected, in which order, and why.
 7. **Host independence** — Anthesis, CI systems, editors, MCP servers, and agent runtimes integrate through adapters rather than core-specific branches.
 
-## Intended architecture
+The accepted mechanism-versus-policy boundary, invariants, compatibility model, error taxonomy, and v0.1 non-goals are documented in [ADR-0001](docs/architecture/ADR-0001-mechanism-policy-boundary.md).
+
+## Architecture
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
@@ -61,22 +79,27 @@ The project mark reflects that origin: layered botanical forms surround a determ
 └────────────────────────────┬─────────────────────────────┘
                              │ stable API / JSON contract
 ┌────────────────────────────▼─────────────────────────────┐
-│ Invokrum CLI and adapters                                │
+│ invokrum-cli                                              │
 │ validate · compose · inspect · lock · verify · diff      │
 └────────────────────────────┬─────────────────────────────┘
-                             │
+                             │ typed Rust API
 ┌────────────────────────────▼─────────────────────────────┐
-│ Invokrum core                                             │
-│ schema · resolution · rules · rendering · hashing         │
+│ invokrum-core                                             │
+│ model · resolution · rules · rendering · hashing         │
 └────────────────────────────┬─────────────────────────────┘
                              │
 ┌────────────────────────────▼─────────────────────────────┐
 │ Consumer-owned overlay packs                              │
-│ classes · profiles · overlays · compatibility policy      │
+│ classes · profiles · overlays · compatibility policy     │
 └──────────────────────────────────────────────────────────┘
 ```
 
-The initial implementation is planned as a Rust workspace with separate core, schema, and CLI crates. Host-specific adapters should remain thin and preserve the core engine's validation and provenance results.
+The initial Rust workspace intentionally starts with two crates:
+
+- `invokrum-core` owns the generic typed model and deterministic engine behavior;
+- `invokrum-cli` exposes operator-facing and subprocess-safe contracts.
+
+Additional crates should be introduced only when they represent a durable compatibility or trust boundary.
 
 ## Proposed workflow
 
@@ -138,18 +161,7 @@ Anthesis is expected to become an early real-world consumer and compatibility te
 
 ## Roadmap
 
-The active project backlog is tracked in [GitHub Issues](https://github.com/hackelia-micrantha/invokrum/issues).
-
-The critical path is:
-
-1. define the v0.1 architecture and extraction boundary;
-2. implement the typed pack/profile domain model;
-3. publish the first versioned schema;
-4. implement deterministic composition and validation;
-5. add hashes, lockfiles, and resolved manifests;
-6. expose a stable CLI;
-7. prove compatibility against selected Anthesis fixtures;
-8. establish reproducible CI and release artifacts.
+The active project backlog is tracked in [GitHub Issues](https://github.com/hackelia-micrantha/invokrum/issues). The milestone sequence is documented in [docs/roadmap.md](docs/roadmap.md).
 
 ## Security posture
 
@@ -163,21 +175,11 @@ Prompt overlays are configuration **and potentially untrusted content**. Invokru
 - denial of service through pathological input;
 - adapters that bypass or reinterpret validated output.
 
-No security guarantee should be inferred before the relevant controls are implemented and tested. Threat-model work is tracked in [issue #9](https://github.com/hackelia-micrantha/invokrum/issues/9).
+No security guarantee should be inferred before the relevant controls are implemented and tested. See [SECURITY.md](SECURITY.md) and threat-model issue [#9](https://github.com/hackelia-micrantha/invokrum/issues/9).
 
 ## Contributing
 
-The project is intentionally starting with architecture, invariants, and compatibility contracts before broad implementation. Design discussion and focused contributions are welcome through the issue tracker.
-
-Good early contributions include:
-
-- reviewing the mechanism-versus-policy boundary;
-- challenging schema and canonicalization assumptions;
-- contributing adversarial fixtures and failure cases;
-- evaluating Rust APIs and deterministic serialization choices;
-- reviewing the threat model and host-adapter boundaries.
-
-Contributor conventions are tracked in [issue #11](https://github.com/hackelia-micrantha/invokrum/issues/11).
+Design discussion and focused contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [development guide](docs/development.md).
 
 ## License
 

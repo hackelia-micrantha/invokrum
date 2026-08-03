@@ -1,0 +1,17 @@
+[package]
+name = "invokrum-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "invokrum"
+path = "src/main.rs"
+
+[dependencies]
+invokrum-core = { path = "../invokrum-core" }
+
+[lints]
+workspace = true
