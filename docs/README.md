@@ -1,6 +1,6 @@
 # Invokrum documentation
 
-Invokrum has an implemented domain model, strict v1 YAML/JSON schema adapter, deterministic composition use case, fail-closed Linux filesystem adapter, canonical lockfile and verification adapter, and layered test baseline. Atomic persistence and most CLI behavior remain planned.
+Invokrum has an implemented domain model, bounded strict v1 YAML/JSON schema adapter, deterministic composition use case, fail-closed Linux filesystem adapter, canonical lockfile and verification adapter, operator CLI, Linux safe-output adapter, and layered test baseline.
 
 Documentation distinguishes between **accepted design**, **planned interfaces**, and **implemented behavior** so examples do not imply unsupported functionality.
 
@@ -15,6 +15,7 @@ Documentation distinguishes between **accepted design**, **planned interfaces**,
 - [V1 schema contract](schema-v1.md)
 - [Configuration model](configuration.md)
 - [Usage model](usage.md)
+- [Governed code-review example](../examples/governed-code-review/README.md)
 - [Development guide](development.md)
 - [Roadmap](roadmap.md)
 
