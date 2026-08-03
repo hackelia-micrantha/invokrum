@@ -67,12 +67,15 @@ jobs:
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             binary: target/x86_64-unknown-linux-gnu/release/invokrum
+            python: python3
           - runner: macos-15-intel
             target: x86_64-apple-darwin
             binary: target/x86_64-apple-darwin/release/invokrum
+            python: python3
           - runner: windows-2025
             target: x86_64-pc-windows-msvc
             binary: target/x86_64-pc-windows-msvc/release/invokrum.exe
+            python: python
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
@@ -98,7 +101,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          python3 scripts/release.py sbom \
+          "${{ matrix.python }}" scripts/release.py sbom \
             --target "${{ matrix.target }}" \
             --output "dist/invokrum-$GITHUB_REF_NAME-${{ matrix.target }}.spdx.json" \
             --epoch "$SOURCE_DATE_EPOCH" \
@@ -108,7 +111,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/release.py package \
+          "${{ matrix.python }}" scripts/release.py package \
             --target "${{ matrix.target }}" \
             --binary "${{ matrix.binary }}" \
             --sbom "dist/invokrum-$GITHUB_REF_NAME-${{ matrix.target }}.spdx.json" \
