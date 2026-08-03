@@ -34,21 +34,24 @@ At root establishment it requires:
 - the selected root itself is not a symbolic link;
 - the selected root is a directory;
 - the root can be canonicalized;
-- a root filesystem device identity can be recorded.
+- the root device and inode can be pinned;
+- `/proc/self/fd` is available for opened-descriptor inspection.
 
 For each overlay it:
 
-1. walks every declared path component with `symlink_metadata`;
-2. rejects symbolic links at every component;
-3. rejects intermediate non-directories;
-4. rejects a device change from the established root, including ordinary mount-point crossings;
-5. canonicalizes the candidate and verifies component-aware containment below the root;
-6. requires a regular file with exactly one hard link;
-7. opens the file and verifies that the opened device/inode matches the pre-open candidate;
-8. resolves `/proc/self/fd/<fd>` and verifies the opened target remains below the root;
-9. reads at most the configured file limit plus one byte;
-10. compares device, inode, size, modification time, and change time before and after reading;
-11. verifies the current path still names the same non-symlink inode.
+1. verifies that the canonical root path still names the pinned directory device and inode;
+2. walks every declared path component with `symlink_metadata`;
+3. rejects symbolic links at every component;
+4. rejects intermediate non-directories;
+5. rejects a device change from the established root, including ordinary mount-point crossings;
+6. canonicalizes the candidate and verifies component-aware containment below the root;
+7. requires a regular file with exactly one hard link;
+8. opens the file and verifies that the opened device/inode matches the pre-open candidate;
+9. resolves `/proc/self/fd/<fd>` and verifies the opened target remains below the root;
+10. reads at most the configured file limit plus one byte;
+11. compares device, inode, size, modification time, and change time before and after reading;
+12. verifies the current path still names the same non-symlink, regular, single-link inode;
+13. verifies that the root path still names the pinned directory after the read.
 
 The adapter returns the bytes from that one opened file. Composition, later hashing, and manifests must use those returned bytes rather than reopening the path.
 
@@ -58,7 +61,7 @@ Windows junction and reparse-point behavior is not approximated. Non-Linux platf
 
 ## Host preconditions and residual risk
 
-The adapter cannot prove a trustworthy filesystem namespace against a privileged actor that can remap mounts during the operation. The host must provide a stable mount namespace and protect the selected pack root from concurrent privileged namespace manipulation.
+The adapter cannot prove a trustworthy filesystem namespace against a privileged actor that can remap mounts during the operation. The host must provide a stable mount namespace, mounted procfs with working `/proc/self/fd`, and a pack-root parent that prevents unauthorized rename or replacement attempts. Root device/inode checks make replacement fail closed once detected.
 
 A hostile kernel, `/proc` implementation, filesystem, or privileged mount-namespace controller remains outside the v0.1 guarantee. Filesystems whose metadata does not provide stable Linux device/inode/time semantics may fail closed or require a future specialized adapter.
 
