@@ -10,8 +10,8 @@ mod lockfile;
 mod sha256;
 
 pub use lockfile::{
-    CANONICALIZATION_FORMAT, Digester, DriftKind, IntegrityError, LOCKFILE_FORMAT,
-    MAX_LOCKED_OVERLAYS, MAX_LOCKFILE_BYTES, LockedManifest, LockedOutput, LockedOverlay,
-    LockedPack, LockedProfile, Lockfile, SHA256_ALGORITHM, Sha256Digester, VerificationReport,
-    build_lockfile, decode_lockfile, encode_lockfile, verify, verify_with,
+    CANONICALIZATION_FORMAT, Digester, DriftKind, IntegrityError, LOCKFILE_FORMAT, LockedManifest,
+    LockedOutput, LockedOverlay, LockedPack, LockedProfile, Lockfile, MAX_LOCKED_OVERLAYS,
+    MAX_LOCKFILE_BYTES, SHA256_ALGORITHM, Sha256Digester, VerificationReport, build_lockfile,
+    decode_lockfile, encode_lockfile, verify, verify_with,
 };
