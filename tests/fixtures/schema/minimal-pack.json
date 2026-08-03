@@ -6,8 +6,8 @@
     { "id": "core", "order": 10, "minimum": 1, "maximum": 1 }
   ],
   "overlays": [
-    { "id": "read-only", "class": "mode", "source": "overlays/read-only.md" },
-    { "id": "core-default", "class": "core", "source": "overlays/core.md" }
+    { "id": "core-default", "class": "core", "source": "overlays/core.md" },
+    { "id": "read-only", "class": "mode", "source": "overlays/read-only.md" }
   ],
   "profiles": [
     {
