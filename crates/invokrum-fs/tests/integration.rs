@@ -15,10 +15,8 @@ struct TestDirectory(PathBuf);
 impl TestDirectory {
     fn new() -> Self {
         let sequence = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "invokrum-fs-{}-{sequence}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("invokrum-fs-{}-{sequence}", std::process::id()));
         fs::create_dir_all(&path).expect("test directory should be created");
         Self(path)
     }
@@ -46,8 +44,7 @@ fn failure(value: &str, kind: SourceFailureKind) -> SourceFailure {
 fn regular_file_is_loaded_from_canonical_root() {
     let root = TestDirectory::new();
     fs::create_dir(root.path().join("overlays")).expect("overlay directory should be created");
-    fs::write(root.path().join("overlays/core.md"), b"core")
-        .expect("overlay should be written");
+    fs::write(root.path().join("overlays/core.md"), b"core").expect("overlay should be written");
 
     let source = LocalPackSource::open(root.path()).expect("root should be accepted");
     assert!(source.root().is_absolute());
@@ -116,9 +113,6 @@ fn directories_are_not_overlay_sources() {
 
     assert_eq!(
         source.load(&path("directory.md"), 32),
-        Err(failure(
-            "directory.md",
-            SourceFailureKind::NotRegularFile
-        ))
+        Err(failure("directory.md", SourceFailureKind::NotRegularFile))
     );
 }
