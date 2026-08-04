@@ -5,10 +5,11 @@
 mod args;
 mod command;
 mod output;
+mod rpc;
 
 use std::ffi::OsString;
 use std::fmt;
-use std::io::Write;
+use std::io::{Read, Write};
 
 pub const EXIT_SUCCESS: i32 = 0;
 pub const EXIT_USAGE: i32 = 2;
@@ -23,6 +24,15 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
+    run_with_stdin(arguments, &mut std::io::empty(), stdout, stderr)
+}
+
+pub fn run_with_stdin(
+    arguments: impl IntoIterator<Item = OsString>,
+    stdin: &mut dyn Read,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
     let command = match args::parse(arguments) {
         Ok(command) => command,
         Err(message) if message == "help" => args::Command::Help,
@@ -32,7 +42,13 @@ pub fn run(
         }
     };
 
-    match command::execute(command) {
+    let execution = if matches!(command, args::Command::Rpc) {
+        Ok(rpc::execute(stdin))
+    } else {
+        command::execute(command)
+    };
+
+    match execution {
         Ok(execution) => {
             if stdout.write_all(&execution.stdout).is_err() {
                 emit_error(stderr, &CliError::output("failed to write stdout"));
