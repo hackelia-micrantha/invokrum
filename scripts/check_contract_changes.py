@@ -40,6 +40,17 @@ POLICIES = (
         required_prefixes=("crates/invokrum-integrity/tests/",),
     ),
     Policy(
+        name="host integration contract",
+        triggers=(
+            "crates/invokrum-host/src/lib.rs",
+            "crates/invokrum-cli/src/rpc.rs",
+            "schemas/invokrum-host-request-v1.schema.json",
+            "schemas/invokrum-host-response-v1.schema.json",
+        ),
+        required_files=("docs/host-adapters.md", "docs/usage.md"),
+        required_prefixes=("crates/invokrum-host/src/", "crates/invokrum-cli/tests/rpc.rs"),
+    ),
+    Policy(
         name="CLI compatibility surface",
         triggers=(
             "crates/invokrum-cli/src/args.rs",
