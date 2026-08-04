@@ -36,8 +36,8 @@ class WorkflowPinTests(unittest.TestCase):
 
 
 class ContractChangeTests(unittest.TestCase):
-    def test_requires_schema_docs_and_tests(self) -> None:
-        errors = validate_changes({"schemas/invokrum-pack-v1.schema.json"})
+    def test_requires_schema_docs_and_tests_for_parser_implementation(self) -> None:
+        errors = validate_changes({"crates/invokrum-schema/src/strict.rs"})
         self.assertTrue(any("docs/schema-v1.md" in error for error in errors))
         self.assertTrue(any("schema/tests" in error for error in errors))
 
@@ -50,6 +50,16 @@ class ContractChangeTests(unittest.TestCase):
             }
         )
         self.assertEqual(errors, [])
+
+    def test_requires_cli_docs_and_tests_for_machine_envelope_changes(self) -> None:
+        errors = validate_changes({"crates/invokrum-cli/src/command.rs"})
+        self.assertTrue(any("docs/usage.md" in error for error in errors))
+        self.assertTrue(any("invokrum-cli/tests" in error for error in errors))
+
+    def test_requires_release_docs_and_tests_for_packaging_changes(self) -> None:
+        errors = validate_changes({"scripts/release.py"})
+        self.assertTrue(any("docs/release.md" in error for error in errors))
+        self.assertTrue(any("tests/test_release" in error for error in errors))
 
 
 class MarkdownLinkTests(unittest.TestCase):
