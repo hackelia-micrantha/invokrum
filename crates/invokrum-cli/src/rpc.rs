@@ -109,10 +109,7 @@ pub(crate) fn execute(stdin: &mut dyn Read) -> Execution {
         Err(error) => return error_execution(None, &error),
     };
     if let Err(message) = validate_json_depth(&request_bytes, MAX_JSON_DEPTH) {
-        return error_execution(
-            None,
-            &RpcError::new(RpcErrorKind::Request, &message),
-        );
+        return error_execution(None, &RpcError::new(RpcErrorKind::Request, &message));
     }
     let request = match serde_json::from_slice::<Request>(&request_bytes) {
         Ok(request) => request,
@@ -247,12 +244,7 @@ fn load_pack(path: &Path) -> Result<(OverlayPack, LocalPackSource), RpcError> {
     let file_name = path
         .file_name()
         .and_then(|value| value.to_str())
-        .ok_or_else(|| {
-            RpcError::new(
-                RpcErrorKind::Input,
-                &"pack path must name a UTF-8 file",
-            )
-        })?;
+        .ok_or_else(|| RpcError::new(RpcErrorKind::Input, &"pack path must name a UTF-8 file"))?;
     let relative = PackRelativePath::parse(file_name.to_owned()).map_err(|_| {
         RpcError::new(
             RpcErrorKind::Input,
@@ -271,12 +263,8 @@ fn load_pack(path: &Path) -> Result<(OverlayPack, LocalPackSource), RpcError> {
             ),
         )
     })?;
-    let text = str::from_utf8(&bytes).map_err(|_| {
-        RpcError::new(
-            RpcErrorKind::Input,
-            &"pack document must be valid UTF-8",
-        )
-    })?;
+    let text = str::from_utf8(&bytes)
+        .map_err(|_| RpcError::new(RpcErrorKind::Input, &"pack document must be valid UTF-8"))?;
     let extension = path
         .extension()
         .and_then(|value| value.to_str())
@@ -293,12 +281,8 @@ fn load_pack(path: &Path) -> Result<(OverlayPack, LocalPackSource), RpcError> {
 }
 
 fn parse_profile(value: &str) -> Result<Identifier, RpcError> {
-    Identifier::parse(value.to_owned()).map_err(|_| {
-        RpcError::new(
-            RpcErrorKind::Validation,
-            &"profile identifier is invalid",
-        )
-    })
+    Identifier::parse(value.to_owned())
+        .map_err(|_| RpcError::new(RpcErrorKind::Validation, &"profile identifier is invalid"))
 }
 
 fn map_host_error(error: HostError) -> RpcError {
@@ -349,12 +333,7 @@ fn read_bounded(reader: &mut dyn Read, maximum_bytes: usize) -> Result<Vec<u8>, 
     reader
         .take((maximum_bytes as u64) + 1)
         .read_to_end(&mut bytes)
-        .map_err(|_| {
-            RpcError::new(
-                RpcErrorKind::Input,
-                &"failed to read request from stdin",
-            )
-        })?;
+        .map_err(|_| RpcError::new(RpcErrorKind::Input, &"failed to read request from stdin"))?;
     if bytes.len() > maximum_bytes {
         return Err(RpcError::new(
             RpcErrorKind::Request,
