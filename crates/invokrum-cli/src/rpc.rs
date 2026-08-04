@@ -2,8 +2,6 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::str;
 
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64;
 use invokrum_core::{CompositionLimits, Identifier, OverlayPack, OverlaySource, PackRelativePath};
 use invokrum_fs::LocalPackSource;
 use invokrum_host::{HOST_CONTRACT_VERSION, HostError, ResolvedBundle, resolve_bundle, verify_bundle};
@@ -16,6 +14,8 @@ use crate::{Execution, EXIT_INPUT, EXIT_INTERNAL, EXIT_SUCCESS, EXIT_VALIDATION}
 const MAX_REQUEST_BYTES: usize = 1_048_576;
 const MAX_PACK_BYTES: usize = 1_048_576;
 const MAX_JSON_DEPTH: usize = 32;
+const BASE64_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -153,11 +153,8 @@ fn execute_operation(operation: Operation) -> Result<(&'static str, Value), RpcE
             profile,
             expected_lock_base64,
         } => {
-            let lock_bytes = BASE64.decode(expected_lock_base64).map_err(|_| {
-                RpcError::new(
-                    RpcErrorKind::Request,
-                    "expected_lock_base64 is not valid canonical base64",
-                )
+            let lock_bytes = decode_base64(&expected_lock_base64).map_err(|message| {
+                RpcError::new(RpcErrorKind::Request, message)
             })?;
             if lock_bytes.len() > MAX_LOCKFILE_BYTES {
                 return Err(RpcError::new(
@@ -190,12 +187,13 @@ fn execute_operation(operation: Operation) -> Result<(&'static str, Value), RpcE
 }
 
 fn capabilities() -> Value {
+    let limits = CompositionLimits::default();
     json!({
         "capabilities": ["capabilities", "resolve", "verify"],
         "default_limits": {
-            "maximum_output_bytes": CompositionLimits::default().maximum_output_bytes(),
-            "maximum_overlay_bytes": CompositionLimits::default().maximum_overlay_bytes(),
-            "maximum_overlays": CompositionLimits::default().maximum_overlays(),
+            "maximum_output_bytes": limits.maximum_output_bytes(),
+            "maximum_overlay_bytes": limits.maximum_overlay_bytes(),
+            "maximum_overlays": limits.maximum_overlays(),
             "maximum_pack_bytes": MAX_PACK_BYTES,
             "maximum_request_bytes": MAX_REQUEST_BYTES,
         },
@@ -208,8 +206,8 @@ fn capabilities() -> Value {
 fn bundle_json(bundle: &ResolvedBundle) -> Value {
     let manifest = bundle.manifest();
     json!({
-        "context_base64": BASE64.encode(bundle.context()),
-        "lock_base64": BASE64.encode(bundle.lock_bytes()),
+        "context_base64": encode_base64(bundle.context()),
+        "lock_base64": encode_base64(bundle.lock_bytes()),
         "manifest": {
             "entries": manifest.entries.iter().map(|entry| json!({
                 "byte_length": entry.byte_length,
@@ -220,10 +218,10 @@ fn bundle_json(bundle: &ResolvedBundle) -> Value {
             "output_bytes": manifest.output_bytes,
             "pack": manifest.pack.to_string(),
             "profile": manifest.profile.to_string(),
-            "schema": manifest.schema_family,
+            "schema": manifest.schema_family.as_str(),
             "source_bytes": manifest.source_bytes,
         },
-        "output_digest": bundle.lockfile().manifest.output.digest,
+        "output_digest": bundle.lockfile().manifest.output.digest.as_str(),
     })
 }
 
@@ -365,8 +363,7 @@ fn validate_json_depth(bytes: &[u8], maximum_depth: usize) -> Result<(), &'stati
 }
 
 fn bounded_parser_message(error: &serde_json::Error) -> String {
-    let message = error.to_string();
-    message.chars().take(256).collect()
+    error.to_string().chars().take(256).collect()
 }
 
 fn drift_json(drift: DriftKind) -> Value {
@@ -378,5 +375,108 @@ fn drift_json(drift: DriftKind) -> Value {
             json!({ "index": index, "kind": "overlay_content" })
         }
         DriftKind::RenderedOutput => json!({ "kind": "rendered_output" }),
+    }
+}
+
+fn encode_base64(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let first = chunk[0];
+        let second = *chunk.get(1).unwrap_or(&0);
+        let third = *chunk.get(2).unwrap_or(&0);
+        encoded.push(char::from(BASE64_ALPHABET[usize::from(first >> 2)]));
+        encoded.push(char::from(
+            BASE64_ALPHABET[usize::from(((first & 0x03) << 4) | (second >> 4))],
+        ));
+        if chunk.len() > 1 {
+            encoded.push(char::from(
+                BASE64_ALPHABET[usize::from(((second & 0x0f) << 2) | (third >> 6))],
+            ));
+        } else {
+            encoded.push('=');
+        }
+        if chunk.len() > 2 {
+            encoded.push(char::from(BASE64_ALPHABET[usize::from(third & 0x3f)]));
+        } else {
+            encoded.push('=');
+        }
+    }
+    encoded
+}
+
+fn decode_base64(value: &str) -> Result<Vec<u8>, &'static str> {
+    let bytes = value.as_bytes();
+    if bytes.len() % 4 != 0 {
+        return Err("expected_lock_base64 length is not a multiple of four");
+    }
+    let mut decoded = Vec::with_capacity((bytes.len() / 4) * 3);
+    for (index, chunk) in bytes.chunks_exact(4).enumerate() {
+        let last = index + 1 == bytes.len() / 4;
+        let padding = match (chunk[2], chunk[3]) {
+            (b'=', b'=') => 2,
+            (_, b'=') => 1,
+            (b'=', _) => return Err("expected_lock_base64 has invalid padding"),
+            _ => 0,
+        };
+        if padding > 0 && !last {
+            return Err("expected_lock_base64 padding must appear only at the end");
+        }
+        let first = decode_base64_character(chunk[0])?;
+        let second = decode_base64_character(chunk[1])?;
+        let third = if padding == 2 {
+            0
+        } else {
+            decode_base64_character(chunk[2])?
+        };
+        let fourth = if padding > 0 {
+            0
+        } else {
+            decode_base64_character(chunk[3])?
+        };
+        if padding == 2 && second & 0x0f != 0 {
+            return Err("expected_lock_base64 has noncanonical trailing bits");
+        }
+        if padding == 1 && third & 0x03 != 0 {
+            return Err("expected_lock_base64 has noncanonical trailing bits");
+        }
+        decoded.push((first << 2) | (second >> 4));
+        if padding < 2 {
+            decoded.push((second << 4) | (third >> 2));
+        }
+        if padding == 0 {
+            decoded.push((third << 6) | fourth);
+        }
+    }
+    Ok(decoded)
+}
+
+fn decode_base64_character(value: u8) -> Result<u8, &'static str> {
+    match value {
+        b'A'..=b'Z' => Ok(value - b'A'),
+        b'a'..=b'z' => Ok(value - b'a' + 26),
+        b'0'..=b'9' => Ok(value - b'0' + 52),
+        b'+' => Ok(62),
+        b'/' => Ok(63),
+        _ => Err("expected_lock_base64 contains an invalid character"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_base64, encode_base64};
+
+    #[test]
+    fn base64_round_trips_boundary_lengths() {
+        for value in [b"".as_slice(), b"a", b"ab", b"abc", b"abcd"] {
+            let encoded = encode_base64(value);
+            assert_eq!(decode_base64(&encoded), Ok(value.to_vec()));
+        }
+    }
+
+    #[test]
+    fn base64_rejects_noncanonical_or_misplaced_padding() {
+        for value in ["A===", "AA=A", "AB==", "AAB="] {
+            assert!(decode_base64(value).is_err(), "value should fail: {value}");
+        }
     }
 }
