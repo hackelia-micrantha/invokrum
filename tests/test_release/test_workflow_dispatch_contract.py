@@ -16,6 +16,16 @@ class ReleaseWorkflowDispatchContractTests(unittest.TestCase):
         self.assertIn('group: release-${{ github.ref }}', workflow)
         self.assertIn('validate-tag --tag "$GITHUB_REF_NAME"', workflow)
 
+    def test_release_gh_commands_are_repository_scoped(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease',
+            workflow,
+        )
+        self.assertIn('gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"', workflow)
+        self.assertIn('--repo "$GITHUB_REPOSITORY"', workflow)
+
     def test_tag_workflow_dispatches_release_at_created_immutable_tag(self) -> None:
         workflow = TAG_WORKFLOW.read_text(encoding="utf-8")
 

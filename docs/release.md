@@ -13,6 +13,8 @@ A release tag must:
 
 The workflow never executes pull-request code with release-write or attestation permissions. Tag builds run only from repository-owned refs on GitHub-hosted runners.
 
+Every `gh release` command passes `--repo "$GITHUB_REPOSITORY"` explicitly so release operations remain valid in jobs that intentionally do not check out the repository.
+
 ## Create a release tag
 
 The manually dispatched **Create Release Tag** workflow creates the immutable annotated tag and then explicitly dispatches the separate **Release** workflow at that tag. It does not change source versions, release notes, or other repository files.
