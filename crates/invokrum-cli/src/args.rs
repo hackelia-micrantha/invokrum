@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-pub(crate) const USAGE: &str = "Invokrum deterministic overlay composition\n\nUSAGE:\n  invokrum [--version]\n  invokrum validate --pack <path> [--profile <id>] [--format human|json]\n  invokrum compose --pack <path> --profile <id> [--output <path>] [--force]\n  invokrum inspect --pack <path> --profile <id> [--format human|json]\n  invokrum lock --pack <path> --profile <id> [--output <path>] [--force]\n  invokrum verify --lock <path> --pack <path> --profile <id> [--format human|json]\n  invokrum diff <baseline-lock> <candidate-lock> [--format human|json]\n\nOPTIONS:\n  --force       Atomically replace an existing regular output file.\n  --format      Select human or stable JSON output.\n  --no-color    Accepted for automation; Invokrum currently emits no ANSI output.\n  --output      Write raw context or canonical lock bytes to a file instead of stdout.\n";
+pub(crate) const USAGE: &str = "Invokrum deterministic overlay composition\n\nUSAGE:\n  invokrum [--version]\n  invokrum validate --pack <path> [--profile <id>] [--format human|json]\n  invokrum compose --pack <path> --profile <id> [--output <path>] [--force]\n  invokrum inspect --pack <path> --profile <id> [--format human|json]\n  invokrum lock --pack <path> --profile <id> [--output <path>] [--force]\n  invokrum verify --lock <path> --pack <path> --profile <id> [--format human|json]\n  invokrum diff <baseline-lock> <candidate-lock> [--format human|json]\n  invokrum rpc\n\nOPTIONS:\n  --force       Atomically replace an existing regular output file.\n  --format      Select human or stable JSON output.\n  --no-color    Accepted for automation; Invokrum currently emits no ANSI output.\n  --output      Write raw context or canonical lock bytes to a file instead of stdout.\n\nRPC:\n  Reads one bounded invokrum.host/v1 JSON request from stdin.\n  Writes one JSON response to stdout and never performs writes or network access.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OutputFormat {
@@ -52,6 +52,7 @@ pub(crate) enum Command {
         candidate: PathBuf,
         format: OutputFormat,
     },
+    Rpc,
 }
 
 pub(crate) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Command, String> {
@@ -77,6 +78,7 @@ pub(crate) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Com
         "lock" => parse_lock(cursor),
         "verify" => parse_verify(cursor),
         "diff" => parse_diff(cursor),
+        "rpc" => parse_rpc(cursor),
         _ => Err(format!("unknown command `{command}`")),
     }
 }
@@ -227,6 +229,10 @@ fn parse_diff(mut cursor: Cursor) -> Result<Command, String> {
         candidate,
         format,
     })
+}
+
+fn parse_rpc(cursor: Cursor) -> Result<Command, String> {
+    finish(cursor, Command::Rpc)
 }
 
 fn parse_pack_destination(
