@@ -13,10 +13,8 @@ struct TestDirectory(PathBuf);
 impl TestDirectory {
     fn new() -> Self {
         let sequence = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "invokrum-rpc-{}-{sequence}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("invokrum-rpc-{}-{sequence}", std::process::id()));
         fs::create_dir_all(&path).expect("test directory should be created");
         Self(path)
     }
@@ -66,8 +64,7 @@ variables: []
     )
     .expect("pack should be written");
     fs::write(directory.path().join("core.md"), b"core").expect("core should be written");
-    fs::write(directory.path().join("review.md"), b"review")
-        .expect("review should be written");
+    fs::write(directory.path().join("review.md"), b"review").expect("review should be written");
     directory
 }
 
@@ -136,9 +133,7 @@ fn resolve_returns_exact_context_and_canonical_lock_bytes() {
             .is_some_and(|value| !value.is_empty())
     );
     assert_eq!(
-        response["result"]["output_digest"]
-            .as_str()
-            .map(str::len),
+        response["result"]["output_digest"].as_str().map(str::len),
         Some(64)
     );
 }
@@ -176,8 +171,7 @@ fn verify_reports_no_drift_and_then_ordered_content_drift() {
     assert_eq!(unchanged["result"]["verified"], true);
     assert_eq!(unchanged["result"]["drifts"], json!([]));
 
-    fs::write(directory.path().join("review.md"), b"changed")
-        .expect("overlay should change");
+    fs::write(directory.path().join("review.md"), b"changed").expect("overlay should change");
     let changed = verify("verify-2");
     assert!(changed.status.success());
     let changed = response(&changed);
