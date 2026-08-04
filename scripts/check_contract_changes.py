@@ -21,7 +21,12 @@ class Policy:
 POLICIES = (
     Policy(
         name="pack schema",
-        triggers=("schemas/invokrum-pack-v1.schema.json",),
+        triggers=(
+            "schemas/invokrum-pack-v1.schema.json",
+            "crates/invokrum-schema/src/lib.rs",
+            "crates/invokrum-schema/src/limits.rs",
+            "crates/invokrum-schema/src/strict.rs",
+        ),
         required_files=("docs/schema-v1.md",),
         required_prefixes=("crates/invokrum-schema/tests/", "tests/fixtures/schema/"),
     ),
@@ -38,6 +43,7 @@ POLICIES = (
         name="CLI compatibility surface",
         triggers=(
             "crates/invokrum-cli/src/args.rs",
+            "crates/invokrum-cli/src/command.rs",
             "crates/invokrum-cli/src/lib.rs",
         ),
         required_files=("docs/usage.md",),
@@ -45,7 +51,10 @@ POLICIES = (
     ),
     Policy(
         name="release workflow",
-        triggers=(".github/workflows/release.yml",),
+        triggers=(
+            ".github/workflows/release.yml",
+            "scripts/release.py",
+        ),
         required_files=("docs/release.md",),
         required_prefixes=("tests/test_release",),
     ),
