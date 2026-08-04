@@ -131,7 +131,7 @@ fn resolve_returns_context_manifest_and_canonical_lock_from_one_read_set() {
     assert_eq!(source.reads(), 3);
     assert_eq!(resolved.context(), b"core\n\nreview\n\nsecurity");
     assert_eq!(resolved.manifest().entries.len(), 3);
-    assert_eq!(resolved.lockfile().manifest.output.byte_length, 24);
+    assert_eq!(resolved.lockfile().manifest.output.byte_length, 22);
     assert_eq!(
         decode_lockfile(resolved.lock_bytes()).expect("lock bytes should be canonical"),
         resolved.lockfile().clone()
