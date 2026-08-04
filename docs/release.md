@@ -122,7 +122,7 @@ Artifact attestations use short-lived keyless signing credentials issued during 
 
 Rerunning a failed tagged workflow uses the workflow snapshot stored at that immutable tag. A later workflow fix on `main` is therefore not applied to that rerun.
 
-When the build and upload jobs succeeded but publication failed, use **Publish Existing Draft Release** from `main`. Supply the immutable tag and type `PUBLISH RELEASE`. The recovery workflow verifies that the tag exists, the matching release is still a draft, and at least one asset is present before publishing it as a prerelease. It never moves the tag or rebuilds artifacts.
+When the build and upload jobs succeeded but publication failed, use **Publish Existing Draft Release** from `main`. Supply the immutable tag and type `PUBLISH RELEASE`. The recovery workflow verifies that the tag exists, the matching release is still a draft, and the complete expected archive, checksum, and SPDX SBOM asset set is present for Linux, macOS, and Windows before publishing it as a prerelease. It never moves the tag or rebuilds artifacts.
 
 A failed run may leave a draft release. Correct the cause and rerun from the same immutable tag only when the source commit remains appropriate. Do not move a published version tag; create a new version for changed source or artifacts.
 
