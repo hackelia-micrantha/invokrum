@@ -324,8 +324,7 @@ fn error_execution(request_id: Option<&str>, error: &RpcError) -> Execution {
 }
 
 fn encode_response(value: &Value) -> Vec<u8> {
-    let mut bytes =
-        serde_json::to_vec(value).unwrap_or_else(|_| INTERNAL_RESPONSE.to_vec());
+    let mut bytes = serde_json::to_vec(value).unwrap_or_else(|_| INTERNAL_RESPONSE.to_vec());
     bytes.push(b'\n');
     bytes
 }
