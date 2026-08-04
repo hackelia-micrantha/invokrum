@@ -15,7 +15,9 @@ The workflow never executes pull-request code with release-write or attestation 
 
 ## Create a release tag
 
-The manually dispatched **Create Release Tag** workflow creates the immutable annotated tag that triggers the release workflow. It does not change source versions, release notes, or other repository files.
+The manually dispatched **Create Release Tag** workflow creates the immutable annotated tag and then explicitly dispatches the separate **Release** workflow at that tag. It does not change source versions, release notes, or other repository files.
+
+The explicit dispatch is required because GitHub suppresses ordinary workflow chaining for refs created with the workflow's `GITHUB_TOKEN`. The Release workflow also retains its `push.tags` trigger for tags created outside GitHub Actions.
 
 The workflow supports these version-selection modes:
 
@@ -36,9 +38,10 @@ The workflow also:
 - rejects an existing local or remote tag;
 - reuses `scripts/release.py validate-tag`;
 - creates an annotated tag object and immutable tag reference through the GitHub API;
-- never force-moves or replaces an existing tag.
+- never force-moves or replaces an existing tag;
+- dispatches the Release workflow using the immutable tag ref.
 
-To create the current workspace release, open **Actions → Create Release Tag → Run workflow**, select `workspace`, leave the target as `main`, and enter `CREATE TAG`. The resulting tag push starts the separate **Release** workflow.
+To create the current workspace release, open **Actions → Create Release Tag → Run workflow**, select `workspace`, leave the target as `main`, and enter `CREATE TAG`. The workflow creates the tag and dispatches **Release** at that exact ref.
 
 ## Produced targets
 
@@ -107,10 +110,11 @@ Artifact attestations use short-lived keyless signing credentials issued during 
 1. Update the workspace version and release notes in a reviewed pull request.
 2. Ensure the default branch is green.
 3. Dispatch **Create Release Tag** using `workspace` or an increment/explicit mode that resolves to the reviewed workspace version.
-4. The tag-triggered release workflow reruns all required delivery gates.
-5. Review the draft release, checksums, SBOMs, and attestation links.
-6. The workflow publishes the prerelease after all matrix jobs complete.
-7. Verify at least one asset using both its checksum and `gh attestation verify`.
+4. The tag workflow creates the immutable tag and explicitly dispatches **Release** at that tag.
+5. The Release workflow reruns all required delivery gates.
+6. Review the draft release, checksums, SBOMs, and attestation links.
+7. The workflow publishes the prerelease after all matrix jobs complete.
+8. Verify at least one asset using both its checksum and `gh attestation verify`.
 
 A failed run may leave a draft release. Correct the cause and rerun from the same immutable tag only when the source commit remains appropriate. Do not move a published version tag; create a new version for changed source or artifacts.
 
