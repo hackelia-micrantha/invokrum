@@ -2,42 +2,39 @@
 
 All notable user-visible changes to Invokrum will be documented in this file.
 
-The format is based on Keep a Changelog principles, and versioned releases follow Semantic Versioning for the currently experimental pre-1.0 contracts.
+The format is based on Keep a Changelog principles, and versioned releases will follow Semantic Versioning once a stable public contract exists.
 
-## 0.1.0 — prerelease candidate
+## 0.1.0 — prerelease
 
 ### Added
 
-- Typed Rust domain model for packs, ordered classes, overlays, profiles, variables, compatibility rules, and resolved manifests.
-- Strict bounded `invokrum.dev/v1` YAML and JSON schema adapter with duplicate-key rejection, conservative YAML feature policy, deterministic normalization, and resource limits.
-- Deterministic fail-closed composition with explicit cardinality and incompatibility validation.
-- Linux local-filesystem source adapter with root identity pinning, traversal and link rejection, stable opened-byte reads, mutation detection, and bounded input handling.
-- Canonical `invokrum.lock/v1` evidence, SHA-256 content addressing, strict lock decoding, verification, and deterministic drift categories.
-- Operator CLI commands: `validate`, `compose`, `inspect`, `lock`, `verify`, and `diff`.
-- Versioned `invokrum.cli/v1` machine output, stable exit categories, strict stdout/stderr separation, terminal-safe diagnostics, shell completions, and Linux safe persistent output.
-- Governed code-review example pack with byte-exact context, manifest, and lock golden artifacts.
-- Transport-neutral `invokrum-host` facade and read-only `invokrum rpc` subprocess protocol using `invokrum.host/v1` request and response envelopes.
-- Layered unit, integration, end-to-end, golden, architecture, adversarial, and compatibility-contract test gates.
-- Cross-platform CLI builds for Linux x64, Intel macOS, and Windows x64.
-- Deterministic release packaging, SHA-256 checksums, SPDX SBOMs, GitHub provenance attestations, and SBOM attestations.
-- Threat model, trust-boundary documentation, architecture decisions, governance, contribution guidance, and security reporting process.
+- Typed overlay-pack, class, overlay, profile, variable, and compatibility domain model.
+- Strict bounded `invokrum.dev/v1` YAML and JSON schema adapter with duplicate-key and unsupported-YAML rejection.
+- Deterministic composition with fail-closed cardinality, compatibility, path, source-byte, and output limits.
+- Linux filesystem adapter with canonical-root pinning, symlink and hard-link rejection, descriptor containment, identity checks, and mutation detection.
+- Canonical `invokrum.lock/v1` evidence, SHA-256 digests, deterministic drift verification, and structural lock diffing.
+- Operator CLI for validate, compose, inspect, lock, verify, diff, and read-only JSON RPC workflows.
+- Transport-neutral host façade and versioned `invokrum.host/v1` request/response contract.
+- Governed code-review example with exact context, manifest, and lock golden artifacts.
+- Layered unit, integration, E2E, golden, architecture, security, and portability test gates.
+- Deterministic cross-platform release packaging with checksums, SPDX SBOMs, and GitHub attestations.
+- Manually dispatched validated release-tag workflow with workspace, patch, minor, major, and explicit selection modes.
+- Initial project purpose, architecture, use-case, configuration, usage, development, security, support, contribution, and roadmap documentation.
+- ADR-0001 defining the mechanism-versus-policy boundary.
 
 ### Security
 
-- Untrusted schema documents are bounded by serialized size, nesting depth, and declaration counts before domain aggregate construction.
-- Ambiguous JSON/YAML mappings and unsupported YAML expansion features fail closed.
-- Overlay source reads reject traversal, symlinks, hard links, root replacement, non-regular files, and relevant identity changes on Linux.
-- Lockfiles exclude variable values and are accepted only in exact canonical form.
-- CLI and RPC machine envelopes are versioned, bounded, and reject duplicate or unknown fields.
-- CI uses immutable action revisions, least-privilege permissions, dependency and license policy, and full-history secret scanning.
+- Untrusted schema documents are bounded by bytes, nesting depth, and declaration counts before domain aggregate construction.
+- Human diagnostics visibly encode attacker-controlled control characters.
+- Persistent Linux output uses private permissions, explicit replacement, same-directory staging, link rejection, identity checks, atomic commit, and failure cleanup.
+- CI uses immutable action revisions, dependency/license/source policy, full-history secret scanning, least-privilege release permissions, and provenance/SBOM attestations.
 
-### Known limitations
+### Limitations
 
-- Secure filesystem-backed composition and persistent output currently support Linux only. macOS and Windows binaries support portable parsing, validation, inspection, lock decoding, diffing, RPC capability discovery, and other operations that do not require the Linux source adapter.
-- Integrity and GitHub build provenance do not authenticate third-party overlay-pack publishers.
-- Structural validation does not establish semantic safety, authorization, approval, or sandboxing.
-- Remote pack fetching, plugin execution, publisher signatures, MCP runtime integration, and Anthesis conformance fixtures are not part of v0.1.
-- Public Rust, CLI machine, host RPC, schema, manifest, and lock contracts remain pre-1.0 and may evolve with explicit changelog entries.
+- Secure filesystem-backed composition and persistent output support Linux only.
+- Structural validation and exact-byte integrity do not establish prompt semantic safety, authorization, runtime isolation, or third-party pack-publisher identity.
+- Native binary reproducibility across different GitHub runner-image revisions is not claimed.
+- Anthesis is not required for this release; future Anthesis conformance fixtures are optional reference-consumer validation.
 
 ## Versioning notes
 
