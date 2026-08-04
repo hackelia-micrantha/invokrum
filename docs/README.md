@@ -1,6 +1,6 @@
 # Invokrum documentation
 
-Invokrum has an implemented domain model, bounded strict v1 YAML/JSON schema adapter, deterministic composition use case, fail-closed Linux filesystem adapter, canonical lockfile and verification adapter, operator CLI, Linux safe-output adapter, and layered test baseline.
+Invokrum has an implemented domain model, bounded strict v1 YAML/JSON schema adapter, deterministic composition use case, fail-closed Linux filesystem adapter, canonical lockfile and verification adapter, operator CLI, Linux safe-output adapter, layered test baseline, dependency and secret gates, and a gated cross-platform prerelease workflow.
 
 Documentation distinguishes between **accepted design**, **planned interfaces**, and **implemented behavior** so examples do not imply unsupported functionality.
 
@@ -12,10 +12,12 @@ Documentation distinguishes between **accepted design**, **planned interfaces**,
 - [Deterministic composition and filesystem contract](composition-and-filesystem.md)
 - [Integrity, canonical manifests, and lockfiles](integrity-and-lockfiles.md)
 - [Threat model and trust boundaries](security/threat-model.md)
+- [Fuzzing strategy](security/fuzzing.md)
 - [V1 schema contract](schema-v1.md)
 - [Configuration model](configuration.md)
 - [Usage model](usage.md)
 - [Governed code-review example](../examples/governed-code-review/README.md)
+- [Release and artifact verification](release.md)
 - [Development guide](development.md)
 - [Roadmap](roadmap.md)
 
