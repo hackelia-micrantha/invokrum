@@ -4,12 +4,14 @@ use std::str;
 
 use invokrum_core::{CompositionLimits, Identifier, OverlayPack, OverlaySource, PackRelativePath};
 use invokrum_fs::LocalPackSource;
-use invokrum_host::{HOST_CONTRACT_VERSION, HostError, ResolvedBundle, resolve_bundle, verify_bundle};
+use invokrum_host::{
+    HOST_CONTRACT_VERSION, HostError, ResolvedBundle, resolve_bundle, verify_bundle,
+};
 use invokrum_integrity::{DriftKind, MAX_LOCKFILE_BYTES, decode_lockfile};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::{Execution, EXIT_INPUT, EXIT_INTERNAL, EXIT_SUCCESS, EXIT_VALIDATION};
+use crate::{EXIT_INPUT, EXIT_INTERNAL, EXIT_SUCCESS, EXIT_VALIDATION, Execution};
 
 const MAX_REQUEST_BYTES: usize = 1_048_576;
 const MAX_PACK_BYTES: usize = 1_048_576;
@@ -18,27 +20,43 @@ const BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Request {
-    protocol: String,
-    request_id: String,
-    #[serde(flatten)]
-    operation: Operation,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "operation", rename_all = "snake_case")]
-enum Operation {
-    Capabilities,
+#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
+enum Request {
+    Capabilities {
+        protocol: String,
+        request_id: String,
+    },
     Resolve {
+        protocol: String,
+        request_id: String,
         pack: PathBuf,
         profile: String,
     },
     Verify {
+        protocol: String,
+        request_id: String,
         pack: PathBuf,
         profile: String,
         expected_lock_base64: String,
     },
+}
+
+impl Request {
+    fn protocol(&self) -> &str {
+        match self {
+            Self::Capabilities { protocol, .. }
+            | Self::Resolve { protocol, .. }
+            | Self::Verify { protocol, .. } => protocol,
+        }
+    }
+
+    fn request_id(&self) -> &str {
+        match self {
+            Self::Capabilities { request_id, .. }
+            | Self::Resolve { request_id, .. }
+            | Self::Verify { request_id, .. } => request_id,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -48,7 +66,6 @@ enum RpcErrorKind {
     Validation,
     Composition,
     Integrity,
-    Internal,
 }
 
 impl RpcErrorKind {
@@ -59,7 +76,6 @@ impl RpcErrorKind {
             Self::Validation => "validation",
             Self::Composition => "composition",
             Self::Integrity => "integrity",
-            Self::Internal => "internal",
         }
     }
 
@@ -67,7 +83,7 @@ impl RpcErrorKind {
         match self {
             Self::Request | Self::Input => EXIT_INPUT,
             Self::Validation | Self::Composition => EXIT_VALIDATION,
-            Self::Integrity | Self::Internal => EXIT_INTERNAL,
+            Self::Integrity => EXIT_INTERNAL,
         }
     }
 }
@@ -104,22 +120,22 @@ pub(crate) fn execute(stdin: &mut dyn Read) -> Execution {
             );
         }
     };
-    let request_id = Some(request.request_id.as_str());
-    if request.protocol != HOST_CONTRACT_VERSION {
+    let request_id = request.request_id().to_owned();
+    if request.protocol() != HOST_CONTRACT_VERSION {
         return error_execution(
-            request_id,
+            Some(&request_id),
             RpcError::new(
                 RpcErrorKind::Request,
                 format!(
                     "unsupported protocol `{}`; expected `{HOST_CONTRACT_VERSION}`",
-                    request.protocol
+                    request.protocol()
                 ),
             ),
         );
     }
-    if request.request_id.is_empty() || request.request_id.len() > 128 {
+    if request_id.is_empty() || request_id.len() > 128 {
         return error_execution(
-            request_id,
+            Some(&request_id),
             RpcError::new(
                 RpcErrorKind::Request,
                 "request_id must contain between 1 and 128 bytes",
@@ -127,35 +143,31 @@ pub(crate) fn execute(stdin: &mut dyn Read) -> Execution {
         );
     }
 
-    match execute_operation(request.operation) {
-        Ok((operation, result)) => success_execution(&request.request_id, operation, result),
-        Err(error) => error_execution(request_id, error),
+    match execute_request(request) {
+        Ok((operation, result)) => success_execution(&request_id, operation, result),
+        Err(error) => error_execution(Some(&request_id), error),
     }
 }
 
-fn execute_operation(operation: Operation) -> Result<(&'static str, Value), RpcError> {
-    match operation {
-        Operation::Capabilities => Ok(("capabilities", capabilities())),
-        Operation::Resolve { pack, profile } => {
+fn execute_request(request: Request) -> Result<(&'static str, Value), RpcError> {
+    match request {
+        Request::Capabilities { .. } => Ok(("capabilities", capabilities())),
+        Request::Resolve { pack, profile, .. } => {
             let (pack_value, source) = load_pack(&pack)?;
             let profile = parse_profile(&profile)?;
-            let bundle = resolve_bundle(
-                &pack_value,
-                &profile,
-                &source,
-                CompositionLimits::default(),
-            )
-            .map_err(map_host_error)?;
+            let bundle =
+                resolve_bundle(&pack_value, &profile, &source, CompositionLimits::default())
+                    .map_err(map_host_error)?;
             Ok(("resolve", bundle_json(&bundle)))
         }
-        Operation::Verify {
+        Request::Verify {
             pack,
             profile,
             expected_lock_base64,
+            ..
         } => {
-            let lock_bytes = decode_base64(&expected_lock_base64).map_err(|message| {
-                RpcError::new(RpcErrorKind::Request, message)
-            })?;
+            let lock_bytes = decode_base64(&expected_lock_base64)
+                .map_err(|message| RpcError::new(RpcErrorKind::Request, message))?;
             if lock_bytes.len() > MAX_LOCKFILE_BYTES {
                 return Err(RpcError::new(
                     RpcErrorKind::Integrity,
@@ -191,11 +203,13 @@ fn capabilities() -> Value {
     json!({
         "capabilities": ["capabilities", "resolve", "verify"],
         "default_limits": {
+            "maximum_json_depth": MAX_JSON_DEPTH,
             "maximum_output_bytes": limits.maximum_output_bytes(),
             "maximum_overlay_bytes": limits.maximum_overlay_bytes(),
             "maximum_overlays": limits.maximum_overlays(),
             "maximum_pack_bytes": MAX_PACK_BYTES,
             "maximum_request_bytes": MAX_REQUEST_BYTES,
+            "maximum_request_id_bytes": 128,
         },
         "network_access": false,
         "persistent_writes": false,
@@ -237,8 +251,8 @@ fn load_pack(path: &Path) -> Result<(OverlayPack, LocalPackSource), RpcError> {
             "pack file name violates the portable path policy",
         )
     })?;
-    let source = LocalPackSource::open(parent)
-        .map_err(|error| RpcError::new(RpcErrorKind::Input, error))?;
+    let source =
+        LocalPackSource::open(parent).map_err(|error| RpcError::new(RpcErrorKind::Input, error))?;
     let bytes = source.load(&relative, MAX_PACK_BYTES).map_err(|error| {
         RpcError::new(
             RpcErrorKind::Input,
@@ -310,6 +324,13 @@ fn encode_response(value: Value) -> Vec<u8> {
     let mut bytes = serde_json::to_vec(&value).unwrap_or_else(|_| {
         br#"{"error":{"code":"internal","message":"failed to encode response"},"format":"invokrum.host/v1","ok":false,"request_id":null}"#.to_vec()
     });
+    if bytes.starts_with(br#"{\""#) {
+        bytes = br#"{"error":{"code":"internal","message":"failed to encode response"},"format":"invokrum.host/v1","ok":false,"request_id":null}"#
+            .iter()
+            .copied()
+            .filter(|byte| *byte != b'\\')
+            .collect();
+    }
     bytes.push(b'\n');
     bytes
 }
