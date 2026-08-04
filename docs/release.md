@@ -8,10 +8,40 @@ A release tag must:
 
 - use `vMAJOR.MINOR.PATCH` or a SemVer prerelease suffix;
 - match `[workspace.package].version` in `Cargo.toml` exactly;
-- point to a commit reachable from `origin/main`;
+- point to the current `main` commit;
 - pass formatting, Clippy, architecture, security, schema, integration, E2E, golden, and portable-build gates.
 
 The workflow never executes pull-request code with release-write or attestation permissions. Tag builds run only from repository-owned refs on GitHub-hosted runners.
+
+## Create a release tag
+
+The manually dispatched **Create Release Tag** workflow creates the immutable annotated tag and then explicitly dispatches the separate **Release** workflow at that tag. It does not change source versions, release notes, or other repository files.
+
+The explicit dispatch is required because GitHub suppresses ordinary workflow chaining for refs created with the workflow's `GITHUB_TOKEN`. The Release workflow also retains its `push.tags` trigger for tags created outside GitHub Actions.
+
+The workflow supports these version-selection modes:
+
+- `workspace`: use `[workspace.package].version` directly;
+- `patch`: increment the patch component of the highest existing stable release tag;
+- `minor`: increment minor and reset patch;
+- `major`: increment major and reset minor and patch;
+- `explicit`: use the supplied SemVer value.
+
+Regardless of mode, the selected version must equal the version already reviewed in `Cargo.toml`. Increment modes are therefore a validation and convenience mechanism, not an unreviewed version-bump mechanism. If the calculated version differs, prepare the version and release notes through a pull request first.
+
+The workflow also:
+
+- requires the exact confirmation text `CREATE TAG`;
+- requires the target to resolve to current `origin/main`;
+- parses existing stable tags using semantic-version ordering rather than lexical ordering;
+- fails when an increment is requested before any stable release tag exists;
+- rejects an existing local or remote tag;
+- reuses `scripts/release.py validate-tag`;
+- creates an annotated tag object and immutable tag reference through the GitHub API;
+- never force-moves or replaces an existing tag;
+- dispatches the Release workflow using the immutable tag ref.
+
+To create the current workspace release, open **Actions → Create Release Tag → Run workflow**, select `workspace`, leave the target as `main`, and enter `CREATE TAG`. The workflow creates the tag and dispatches **Release** at that exact ref.
 
 ## Produced targets
 
@@ -79,10 +109,12 @@ Artifact attestations use short-lived keyless signing credentials issued during 
 
 1. Update the workspace version and release notes in a reviewed pull request.
 2. Ensure the default branch is green.
-3. Create and push the matching `v...` tag from the intended default-branch commit.
-4. Review the draft release, checksums, SBOMs, and attestation links.
-5. The workflow publishes the prerelease after all matrix jobs complete.
-6. Verify at least one asset using both its checksum and `gh attestation verify`.
+3. Dispatch **Create Release Tag** using `workspace` or an increment/explicit mode that resolves to the reviewed workspace version.
+4. The tag workflow creates the immutable tag and explicitly dispatches **Release** at that tag.
+5. The Release workflow reruns all required delivery gates.
+6. Review the draft release, checksums, SBOMs, and attestation links.
+7. The workflow publishes the prerelease after all matrix jobs complete.
+8. Verify at least one asset using both its checksum and `gh attestation verify`.
 
 A failed run may leave a draft release. Correct the cause and rerun from the same immutable tag only when the source commit remains appropriate. Do not move a published version tag; create a new version for changed source or artifacts.
 
