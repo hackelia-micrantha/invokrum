@@ -11,7 +11,6 @@ name = "invokrum"
 path = "src/main.rs"
 
 [dependencies]
-base64 = "0.22.1"
 invokrum-core = { version = "0.1.0", path = "../invokrum-core" }
 invokrum-fs = { version = "0.1.0", path = "../invokrum-fs" }
 invokrum-host = { version = "0.1.0", path = "../invokrum-host" }
