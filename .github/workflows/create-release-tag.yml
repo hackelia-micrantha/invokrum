@@ -29,6 +29,7 @@ on:
         type: string
 
 permissions:
+  actions: write
   contents: write
 
 concurrency:
@@ -194,9 +195,18 @@ jobs:
             -f ref="refs/tags/$TAG" \
             -f sha="$TAG_OBJECT_SHA"
 
+      - name: Dispatch release workflow at immutable tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --ref "$TAG"
+
       - name: Report release trigger
         env:
           TAG: ${{ steps.release.outputs.tag }}
           TARGET_SHA: ${{ steps.release.outputs.target_sha }}
         run: |
-          echo "Created $TAG at $TARGET_SHA. The tag-triggered Release workflow will validate, build, attest, and publish the prerelease."
+          echo "Created $TAG at $TARGET_SHA and dispatched the Release workflow at the immutable tag."
