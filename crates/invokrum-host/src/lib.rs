@@ -212,3 +212,132 @@ pub fn verify_bundle_with(
     let report = verify_with(expected, pack, current.composition(), digester)?;
     Ok(VerifiedBundle { current, report })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use invokrum_core::{
+        Cardinality, Overlay, OverlayClass, PackRelativePath, Profile, SourceFailure,
+        SourceFailureKind,
+    };
+    use invokrum_integrity::{DriftKind, decode_lockfile};
+
+    use super::*;
+
+    fn id(value: &str) -> Identifier {
+        Identifier::parse(value).expect("valid test identifier")
+    }
+
+    fn path(value: &str) -> PackRelativePath {
+        PackRelativePath::parse(value).expect("valid test path")
+    }
+
+    fn pack() -> OverlayPack {
+        OverlayPack::new(
+            id("example"),
+            "invokrum.dev/v1",
+            vec![OverlayClass {
+                id: id("core"),
+                order: 10,
+                cardinality: Cardinality::new(1, Some(1)).expect("valid cardinality"),
+            }],
+            vec![Overlay {
+                id: id("core-default"),
+                class: id("core"),
+                source: path("core.md"),
+                incompatible_with: BTreeSet::new(),
+            }],
+            vec![Profile {
+                id: id("default"),
+                selections: BTreeMap::from([(id("core"), vec![id("core-default")])]),
+            }],
+            Vec::new(),
+        )
+        .expect("valid test pack")
+    }
+
+    struct CountingSource {
+        bytes: Vec<u8>,
+        reads: Cell<usize>,
+    }
+
+    impl CountingSource {
+        fn new(bytes: &[u8]) -> Self {
+            Self {
+                bytes: bytes.to_vec(),
+                reads: Cell::new(0),
+            }
+        }
+    }
+
+    impl OverlaySource for CountingSource {
+        fn load(
+            &self,
+            source: &PackRelativePath,
+            maximum_bytes: usize,
+        ) -> Result<Vec<u8>, SourceFailure> {
+            self.reads.set(self.reads.get() + 1);
+            if self.bytes.len() > maximum_bytes {
+                return Err(SourceFailure::new(
+                    source.clone(),
+                    SourceFailureKind::TooLarge,
+                ));
+            }
+            Ok(self.bytes.clone())
+        }
+    }
+
+    #[test]
+    fn resolution_derives_context_and_canonical_lock_from_one_source_read() {
+        let source = CountingSource::new(b"core");
+        let resolved = resolve_bundle(
+            &pack(),
+            &id("default"),
+            &source,
+            CompositionLimits::default(),
+        )
+        .expect("resolution should succeed");
+
+        assert_eq!(source.reads.get(), 1);
+        assert_eq!(resolved.context(), b"core");
+        assert_eq!(resolved.manifest().output_bytes, 4);
+        assert_eq!(
+            decode_lockfile(resolved.lock_bytes()).expect("canonical lock should decode"),
+            resolved.lockfile().clone()
+        );
+    }
+
+    #[test]
+    fn verification_reuses_current_composition_without_a_second_source_read() {
+        let baseline_source = CountingSource::new(b"core");
+        let baseline = resolve_bundle(
+            &pack(),
+            &id("default"),
+            &baseline_source,
+            CompositionLimits::default(),
+        )
+        .expect("baseline should resolve");
+
+        let changed_source = CountingSource::new(b"changed");
+        let verified = verify_bundle(
+            baseline.lockfile(),
+            &pack(),
+            &id("default"),
+            &changed_source,
+            CompositionLimits::default(),
+        )
+        .expect("verification should succeed");
+
+        assert_eq!(changed_source.reads.get(), 1);
+        assert!(!verified.is_verified());
+        assert_eq!(
+            verified.report().drifts(),
+            &[
+                DriftKind::OverlayContent { index: 0 },
+                DriftKind::RenderedOutput,
+            ]
+        );
+    }
+}
