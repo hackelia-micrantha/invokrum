@@ -4,29 +4,34 @@ Invokrum is being built from architecture and compatibility contracts outward. M
 
 ## v0.1 — deterministic local composition
 
-- [ ] Accept the mechanism-versus-policy architecture boundary.
-- [ ] Implement typed pack, overlay, class, profile, and rule models.
-- [ ] Publish the first versioned YAML/JSON schema.
-- [ ] Validate references, cardinality, compatibility, and pack-relative paths.
-- [ ] Resolve deterministic overlay order.
-- [ ] Render canonical context bytes.
-- [ ] Emit stable inspection JSON and diagnostics.
-- [ ] Add hashes, resolved manifests, lockfiles, verification, and structural diffing.
-- [ ] Provide the initial CLI.
-- [ ] Add a minimal example pack.
-- [ ] Prove selected behavior against Anthesis compatibility fixtures.
-- [ ] Establish CI and reproducible pre-release artifacts.
+- [x] Accept the mechanism-versus-policy architecture boundary.
+- [x] Implement typed pack, overlay, class, profile, and rule models.
+- [x] Publish the first versioned YAML/JSON schema.
+- [x] Validate references, cardinality, compatibility, and pack-relative paths.
+- [x] Resolve deterministic overlay order.
+- [x] Render canonical context bytes.
+- [x] Emit stable inspection JSON and diagnostics.
+- [x] Add hashes, resolved manifests, lockfiles, verification, and structural diffing.
+- [x] Provide the initial CLI.
+- [x] Add a minimal example pack.
+- [x] Establish CI and reproducible pre-release artifacts.
+- [ ] Publish and independently verify the first v0.1 prerelease.
 
-## v0.2 — integration contracts
+Anthesis conformance is not a v0.1 release gate. Invokrum must remain independently useful and must not make Anthesis policy part of its public model.
 
-Potential scope after v0.1 contracts are stable:
+## v0.2 — integration and reference-consumer validation
 
-- stable library API review;
-- subprocess JSON request/response contract;
-- Anthesis adapter;
-- read-only MCP adapter;
-- GitHub Action for validation and drift checks;
-- signed pack-install workflow separated from offline composition.
+Potential scope after v0.1 contracts are released:
+
+- review the stable library API;
+- evolve the implemented subprocess JSON request/response contract from real consumer feedback;
+- represent selected Anthesis behavior as an external reference-consumer conformance pack;
+- add an Anthesis adapter without Anthesis-specific branches in the engine;
+- add a read-only MCP adapter;
+- add a GitHub Action for validation and drift checks;
+- design a signed pack-install workflow separated from offline composition.
+
+The Anthesis conformance suite is intended to test the extraction boundary, not to establish permanent product coupling or compatibility guarantees.
 
 ## Later exploration
 
@@ -46,5 +51,6 @@ These are not commitments:
 - Plugin code execution should not precede a capability and sandbox model.
 - Profile inheritance should not precede deterministic merge semantics.
 - Public JSON and lockfile formats should not be declared stable before golden and cross-platform tests exist.
+- Consumer-specific conformance work must not introduce consumer-specific policy into the core engine.
 
 The issue tracker is the authoritative source for active work and dependencies.
