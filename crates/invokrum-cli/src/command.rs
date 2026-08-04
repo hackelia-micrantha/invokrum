@@ -49,6 +49,9 @@ pub(crate) fn execute(command: Command) -> Result<Execution, CliError> {
             candidate,
             format,
         } => diff(&baseline, &candidate, format),
+        Command::Rpc => Err(CliError::internal(
+            "rpc must be routed through the explicit stdin boundary",
+        )),
     }
 }
 

@@ -30,8 +30,10 @@ version = "0.1.0"
 dependencies = [
  "invokrum-core",
  "invokrum-fs",
+ "invokrum-host",
  "invokrum-integrity",
  "invokrum-schema",
+ "serde",
  "serde_json",
 ]
 
@@ -44,6 +46,14 @@ name = "invokrum-fs"
 version = "0.1.0"
 dependencies = [
  "invokrum-core",
+]
+
+[[package]]
+name = "invokrum-host"
+version = "0.1.0"
+dependencies = [
+ "invokrum-core",
+ "invokrum-integrity",
 ]
 
 [[package]]

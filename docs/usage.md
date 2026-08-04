@@ -1,6 +1,6 @@
 # Usage
 
-Invokrum v0.1 provides an offline CLI for validating packs, resolving profiles, composing exact context bytes, inspecting manifests, generating canonical locks, verifying repository state, and comparing locks.
+Invokrum v0.1 provides an offline CLI for validating packs, resolving profiles, composing exact context bytes, inspecting manifests, generating canonical locks, verifying repository state, comparing locks, and serving a bounded read-only JSON subprocess contract.
 
 ## Platform boundary
 
@@ -140,11 +140,30 @@ invokrum diff ./baseline.lock ./candidate.lock --format json
 
 Identical locks exit `0`. Structural or content differences exit `5` and identify the changed categories. Both inputs must be strict canonical v1 lockfiles.
 
+## Read-only host RPC
+
+`invokrum rpc` reads one `invokrum.host/v1` JSON request from stdin and writes one JSON response to stdout. It supports `capabilities`, `resolve`, and `verify` only. It performs no network access, persistent writes, model invocation, or tool execution.
+
+```bash
+printf '%s\n' '{
+  "protocol":"invokrum.host/v1",
+  "request_id":"resolve-1",
+  "operation":"resolve",
+  "pack":"./pack.yaml",
+  "profile":"secure-review"
+}' | invokrum rpc
+```
+
+Exact context and canonical lock bytes are returned as canonical padded RFC 4648 base64. Failures after the `rpc` command is accepted also use stdout as one versioned JSON error envelope; stderr remains reserved for command-line parsing or stdout failures.
+
+The complete lifecycle, schemas, capability model, Anthesis design, MCP scope, and CI/editor guidance are documented in [Host adapters and subprocess integration](host-adapters.md).
+
 ## Output contracts
 
 - Raw context and canonical lock bytes use stdout only.
 - Human and JSON command results use stdout.
-- Errors use stderr only.
+- Ordinary CLI errors use stderr only.
+- RPC success and operation errors use one JSON response on stdout.
 - JSON output has one trailing LF; raw context and lock bytes are not modified.
 - Human diagnostics visibly encode control characters.
 - No command emits ANSI escape sequences.
@@ -157,11 +176,13 @@ Identical locks exit `0`. Structural or content differences exit `5` and identif
 | ---: | --- |
 | `0` | Success, verified state, or identical locks |
 | `2` | Invalid command or arguments |
-| `3` | Pack, lock, path, or local-source input failure |
+| `3` | Pack, lock, path, local-source, or RPC request/input failure |
 | `4` | Schema, domain, profile, compatibility, or composition failure |
-| `5` | Verification drift or lock difference |
+| `5` | Verification drift or lock difference for ordinary CLI commands |
 | `6` | Stdout or persistent-output failure |
 | `7` | Lock integrity, canonicalization, digest, or internal encoding failure |
+
+RPC `verify` reports drift inside a successful protocol response rather than returning exit `5`; the host decides whether drift blocks execution.
 
 ## Safe persistent output
 

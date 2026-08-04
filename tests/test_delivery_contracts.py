@@ -51,6 +51,23 @@ class ContractChangeTests(unittest.TestCase):
         )
         self.assertEqual(errors, [])
 
+    def test_requires_host_docs_and_tests_for_rpc_changes(self) -> None:
+        errors = validate_changes({"crates/invokrum-cli/src/rpc.rs"})
+        self.assertTrue(any("docs/host-adapters.md" in error for error in errors))
+        self.assertTrue(any("docs/usage.md" in error for error in errors))
+        self.assertTrue(any("invokrum-cli/tests/rpc.rs" in error for error in errors))
+
+    def test_accepts_complete_host_contract_cochange(self) -> None:
+        errors = validate_changes(
+            {
+                "crates/invokrum-host/src/lib.rs",
+                "crates/invokrum-cli/tests/rpc.rs",
+                "docs/host-adapters.md",
+                "docs/usage.md",
+            }
+        )
+        self.assertEqual(errors, [])
+
     def test_requires_cli_docs_and_tests_for_machine_envelope_changes(self) -> None:
         errors = validate_changes({"crates/invokrum-cli/src/command.rs"})
         self.assertTrue(any("docs/usage.md" in error for error in errors))
