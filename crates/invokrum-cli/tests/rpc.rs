@@ -91,13 +91,13 @@ fn response(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("stdout should be one JSON response")
 }
 
-fn request(operation: Value) -> Vec<u8> {
-    serde_json::to_vec(&operation).expect("request should encode")
+fn request(operation: &Value) -> Vec<u8> {
+    serde_json::to_vec(operation).expect("request should encode")
 }
 
 #[test]
 fn capabilities_are_explicitly_read_only() {
-    let output = invoke(&request(json!({
+    let output = invoke(&request(&json!({
         "protocol": "invokrum.host/v1",
         "request_id": "cap-1",
         "operation": "capabilities"
@@ -114,7 +114,7 @@ fn capabilities_are_explicitly_read_only() {
 #[test]
 fn resolve_returns_exact_context_and_canonical_lock_bytes() {
     let directory = fixture();
-    let output = invoke(&request(json!({
+    let output = invoke(&request(&json!({
         "protocol": "invokrum.host/v1",
         "request_id": "resolve-1",
         "operation": "resolve",
@@ -141,7 +141,7 @@ fn resolve_returns_exact_context_and_canonical_lock_bytes() {
 #[test]
 fn verify_reports_no_drift_and_then_ordered_content_drift() {
     let directory = fixture();
-    let resolve = invoke(&request(json!({
+    let resolve = invoke(&request(&json!({
         "protocol": "invokrum.host/v1",
         "request_id": "resolve-2",
         "operation": "resolve",
@@ -155,7 +155,7 @@ fn verify_reports_no_drift_and_then_ordered_content_drift() {
         .expect("lock should be present");
 
     let verify = |request_id: &str| {
-        invoke(&request(json!({
+        invoke(&request(&json!({
             "protocol": "invokrum.host/v1",
             "request_id": request_id,
             "operation": "verify",
@@ -202,7 +202,7 @@ fn duplicate_or_unknown_request_fields_fail_as_one_machine_response() {
 #[test]
 fn unsupported_protocol_and_malformed_base64_fail_closed() {
     let directory = fixture();
-    let unsupported = invoke(&request(json!({
+    let unsupported = invoke(&request(&json!({
         "protocol": "invokrum.host/v2",
         "request_id": "future",
         "operation": "capabilities"
@@ -210,7 +210,7 @@ fn unsupported_protocol_and_malformed_base64_fail_closed() {
     assert_eq!(unsupported.status.code(), Some(3));
     assert_eq!(response(&unsupported)["error"]["code"], "request");
 
-    let malformed = invoke(&request(json!({
+    let malformed = invoke(&request(&json!({
         "protocol": "invokrum.host/v1",
         "request_id": "bad-lock",
         "operation": "verify",
