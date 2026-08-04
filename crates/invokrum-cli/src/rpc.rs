@@ -18,6 +18,7 @@ const MAX_PACK_BYTES: usize = 1_048_576;
 const MAX_JSON_DEPTH: usize = 32;
 const BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const INTERNAL_RESPONSE: &[u8] = br#"{"error":{"code":"internal","message":"failed to encode response"},"format":"invokrum.host/v1","ok":false,"request_id":null}"#;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
@@ -95,10 +96,10 @@ struct RpcError {
 }
 
 impl RpcError {
-    fn new(kind: RpcErrorKind, message: &impl ToString) -> Self {
+    fn new(kind: RpcErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
-            message: message.to_string(),
+            message: message.into(),
         }
     }
 }
@@ -109,14 +110,14 @@ pub(crate) fn execute(stdin: &mut dyn Read) -> Execution {
         Err(error) => return error_execution(None, &error),
     };
     if let Err(message) = validate_json_depth(&request_bytes, MAX_JSON_DEPTH) {
-        return error_execution(None, &RpcError::new(RpcErrorKind::Request, &message));
+        return error_execution(None, &RpcError::new(RpcErrorKind::Request, message));
     }
     let request = match serde_json::from_slice::<Request>(&request_bytes) {
         Ok(request) => request,
         Err(error) => {
             return error_execution(
                 None,
-                &RpcError::new(RpcErrorKind::Request, &bounded_parser_message(&error)),
+                &RpcError::new(RpcErrorKind::Request, bounded_parser_message(&error)),
             );
         }
     };
@@ -126,7 +127,7 @@ pub(crate) fn execute(stdin: &mut dyn Read) -> Execution {
             Some(&request_id),
             &RpcError::new(
                 RpcErrorKind::Request,
-                &format!(
+                format!(
                     "unsupported protocol `{}`; expected `{HOST_CONTRACT_VERSION}`",
                     request.protocol()
                 ),
@@ -138,7 +139,7 @@ pub(crate) fn execute(stdin: &mut dyn Read) -> Execution {
             Some(&request_id),
             &RpcError::new(
                 RpcErrorKind::Request,
-                &"request_id must contain between 1 and 128 bytes",
+                "request_id must contain between 1 and 128 bytes",
             ),
         );
     }
@@ -167,15 +168,15 @@ fn execute_request(request: Request) -> Result<(&'static str, Value), RpcError> 
             ..
         } => {
             let lock_bytes = decode_base64(&expected_lock_base64)
-                .map_err(|message| RpcError::new(RpcErrorKind::Request, &message))?;
+                .map_err(|message| RpcError::new(RpcErrorKind::Request, message))?;
             if lock_bytes.len() > MAX_LOCKFILE_BYTES {
                 return Err(RpcError::new(
                     RpcErrorKind::Integrity,
-                    &"decoded expected lock exceeds the configured byte limit",
+                    "decoded expected lock exceeds the configured byte limit",
                 ));
             }
             let expected = decode_lockfile(&lock_bytes)
-                .map_err(|error| RpcError::new(RpcErrorKind::Integrity, &error))?;
+                .map_err(|error| RpcError::new(RpcErrorKind::Integrity, error.to_string()))?;
             let (pack_value, source) = load_pack(&pack)?;
             let profile = parse_profile(&profile)?;
             let verified = verify_bundle(
@@ -244,19 +245,19 @@ fn load_pack(path: &Path) -> Result<(OverlayPack, LocalPackSource), RpcError> {
     let file_name = path
         .file_name()
         .and_then(|value| value.to_str())
-        .ok_or_else(|| RpcError::new(RpcErrorKind::Input, &"pack path must name a UTF-8 file"))?;
+        .ok_or_else(|| RpcError::new(RpcErrorKind::Input, "pack path must name a UTF-8 file"))?;
     let relative = PackRelativePath::parse(file_name.to_owned()).map_err(|_| {
         RpcError::new(
             RpcErrorKind::Input,
-            &"pack file name violates the portable path policy",
+            "pack file name violates the portable path policy",
         )
     })?;
     let source = LocalPackSource::open(parent)
-        .map_err(|error| RpcError::new(RpcErrorKind::Input, &error))?;
+        .map_err(|error| RpcError::new(RpcErrorKind::Input, error.to_string()))?;
     let bytes = source.load(&relative, MAX_PACK_BYTES).map_err(|error| {
         RpcError::new(
             RpcErrorKind::Input,
-            &format!(
+            format!(
                 "pack input `{}` was rejected: {}",
                 error.path.as_str(),
                 error.kind
@@ -264,7 +265,7 @@ fn load_pack(path: &Path) -> Result<(OverlayPack, LocalPackSource), RpcError> {
         )
     })?;
     let text = str::from_utf8(&bytes)
-        .map_err(|_| RpcError::new(RpcErrorKind::Input, &"pack document must be valid UTF-8"))?;
+        .map_err(|_| RpcError::new(RpcErrorKind::Input, "pack document must be valid UTF-8"))?;
     let extension = path
         .extension()
         .and_then(|value| value.to_str())
@@ -276,19 +277,21 @@ fn load_pack(path: &Path) -> Result<(OverlayPack, LocalPackSource), RpcError> {
         _ if text.trim_start().starts_with('{') => invokrum_schema::parse_json(text),
         _ => invokrum_schema::parse_yaml(text),
     }
-    .map_err(|error| RpcError::new(RpcErrorKind::Validation, &error))?;
+    .map_err(|error| RpcError::new(RpcErrorKind::Validation, error.to_string()))?;
     Ok((pack, source))
 }
 
 fn parse_profile(value: &str) -> Result<Identifier, RpcError> {
     Identifier::parse(value.to_owned())
-        .map_err(|_| RpcError::new(RpcErrorKind::Validation, &"profile identifier is invalid"))
+        .map_err(|_| RpcError::new(RpcErrorKind::Validation, "profile identifier is invalid"))
 }
 
 fn map_host_error(error: HostError) -> RpcError {
     match error {
-        HostError::Composition(error) => RpcError::new(RpcErrorKind::Composition, &error),
-        HostError::Integrity(error) => RpcError::new(RpcErrorKind::Integrity, &error),
+        HostError::Composition(error) => {
+            RpcError::new(RpcErrorKind::Composition, error.to_string())
+        }
+        HostError::Integrity(error) => RpcError::new(RpcErrorKind::Integrity, error.to_string()),
     }
 }
 
@@ -321,9 +324,8 @@ fn error_execution(request_id: Option<&str>, error: &RpcError) -> Execution {
 }
 
 fn encode_response(value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(value).unwrap_or_else(|_| {
-        br#"{"error":{"code":"internal","message":"failed to encode response"},"format":"invokrum.host/v1","ok":false,"request_id":null}"#.to_vec()
-    });
+    let mut bytes =
+        serde_json::to_vec(value).unwrap_or_else(|_| INTERNAL_RESPONSE.to_vec());
     bytes.push(b'\n');
     bytes
 }
@@ -333,15 +335,15 @@ fn read_bounded(reader: &mut dyn Read, maximum_bytes: usize) -> Result<Vec<u8>, 
     reader
         .take((maximum_bytes as u64) + 1)
         .read_to_end(&mut bytes)
-        .map_err(|_| RpcError::new(RpcErrorKind::Input, &"failed to read request from stdin"))?;
+        .map_err(|_| RpcError::new(RpcErrorKind::Input, "failed to read request from stdin"))?;
     if bytes.len() > maximum_bytes {
         return Err(RpcError::new(
             RpcErrorKind::Request,
-            &"request exceeds the configured byte limit",
+            "request exceeds the configured byte limit",
         ));
     }
     if bytes.is_empty() {
-        return Err(RpcError::new(RpcErrorKind::Request, &"request is empty"));
+        return Err(RpcError::new(RpcErrorKind::Request, "request is empty"));
     }
     Ok(bytes)
 }
@@ -477,7 +479,9 @@ fn decode_base64_character(value: u8) -> Result<u8, &'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_base64, encode_base64};
+    use serde_json::Value;
+
+    use super::{INTERNAL_RESPONSE, decode_base64, encode_base64};
 
     #[test]
     fn base64_round_trips_boundary_lengths() {
@@ -492,5 +496,14 @@ mod tests {
         for value in ["A===", "AA=A", "AB==", "AAB="] {
             assert!(decode_base64(value).is_err(), "value should fail: {value}");
         }
+    }
+
+    #[test]
+    fn emergency_response_is_valid_machine_json() {
+        let response: Value =
+            serde_json::from_slice(INTERNAL_RESPONSE).expect("fallback must be valid JSON");
+        assert_eq!(response["format"], "invokrum.host/v1");
+        assert_eq!(response["ok"], false);
+        assert_eq!(response["error"]["code"], "internal");
     }
 }
