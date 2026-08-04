@@ -182,14 +182,7 @@ pub fn verify_bundle(
     source: &impl OverlaySource,
     limits: CompositionLimits,
 ) -> Result<VerifiedBundle, HostError> {
-    verify_bundle_with(
-        expected,
-        pack,
-        profile,
-        source,
-        limits,
-        &Sha256Digester,
-    )
+    verify_bundle_with(expected, pack, profile, source, limits, &Sha256Digester)
 }
 
 /// Resolves current bytes and verifies them with an injected digest capability.
