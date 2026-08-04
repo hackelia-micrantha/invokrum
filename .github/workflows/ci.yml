@@ -170,6 +170,77 @@ jobs:
       - name: Run every CLI integration and golden test
         run: cargo test -p invokrum-cli --tests --all-features --locked
 
+  release-smoke:
+    name: Deterministic Linux release smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Build release CLI
+        run: cargo build -p invokrum-cli --release --locked
+      - name: Reproduce SPDX, archive, and checksum bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          epoch="$(git show -s --format=%ct HEAD)"
+          revision="$(git rev-parse HEAD)"
+          rm -rf release-smoke
+          mkdir -p release-smoke/a release-smoke/b
+
+          python3 scripts/release.py sbom \
+            --target x86_64-unknown-linux-gnu \
+            --output release-smoke/a/sbom.spdx.json \
+            --epoch "$epoch" \
+            --revision "$revision"
+          python3 scripts/release.py sbom \
+            --target x86_64-unknown-linux-gnu \
+            --output release-smoke/b/sbom.spdx.json \
+            --epoch "$epoch" \
+            --revision "$revision"
+          cmp release-smoke/a/sbom.spdx.json release-smoke/b/sbom.spdx.json
+
+          python3 scripts/release.py package \
+            --target x86_64-unknown-linux-gnu \
+            --binary target/release/invokrum \
+            --sbom release-smoke/a/sbom.spdx.json \
+            --dist release-smoke/a \
+            --epoch "$epoch"
+          python3 scripts/release.py package \
+            --target x86_64-unknown-linux-gnu \
+            --binary target/release/invokrum \
+            --sbom release-smoke/b/sbom.spdx.json \
+            --dist release-smoke/b \
+            --epoch "$epoch"
+
+          archive_a="$(find release-smoke/a -maxdepth 1 -name 'invokrum-*.tar.gz' -print -quit)"
+          archive_b="$(find release-smoke/b -maxdepth 1 -name 'invokrum-*.tar.gz' -print -quit)"
+          test -n "$archive_a"
+          test -n "$archive_b"
+          cmp "$archive_a" "$archive_b"
+          cmp "$archive_a.sha256" "$archive_b.sha256"
+          (cd "$(dirname "$archive_a")" && sha256sum --check --strict "$(basename "$archive_a").sha256")
+
+          python3 - "$archive_a" release-smoke/a/sbom.spdx.json <<'PY'
+          import json
+          import sys
+          import tarfile
+          from pathlib import Path
+
+          archive = Path(sys.argv[1])
+          sbom = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          assert sbom["spdxVersion"] == "SPDX-2.3"
+          assert sbom["dataLicense"] == "CC0-1.0"
+          with tarfile.open(archive, mode="r:gz") as packaged:
+              assert packaged.getnames() == [
+                  "LICENSE",
+                  "README.md",
+                  "SBOM.spdx.json",
+                  "invokrum",
+              ]
+          PY
+
   portable:
     name: Portable build (${{ matrix.target }})
     strategy:
