@@ -26,12 +26,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Check out complete repository history
+      - name: Check out complete repository history without credentials
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-      - name: Validate tag against workspace version
-        run: python3 scripts/release.py validate-tag --tag "$GITHUB_REF_NAME"
+          persist-credentials: false
       - name: Require exact immutable tag commit on main
         shell: bash
         run: |
@@ -40,6 +39,8 @@ jobs:
           test "$tag_commit" = "$GITHUB_SHA"
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Validate tag against workspace version
+        run: python3 scripts/release.py validate-tag --tag "$GITHUB_REF_NAME"
       - name: Create or reuse draft prerelease
         env:
           GH_TOKEN: ${{ github.token }}
@@ -90,8 +91,10 @@ jobs:
       attestations: write
       artifact-metadata: write
     steps:
-      - name: Check out tagged source
+      - name: Check out tagged source without credentials
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Install release target
